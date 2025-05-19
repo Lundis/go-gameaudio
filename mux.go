@@ -18,6 +18,7 @@ package oto
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"runtime"
 	"sync"
@@ -29,7 +30,7 @@ type Mux struct {
 	sampleRate   int
 	channelCount int
 
-	players map[*playerImpl]struct{}
+	players map[*Player]struct{}
 	cond    *sync.Cond
 }
 
@@ -63,7 +64,7 @@ func (m *Mux) wait() {
 }
 
 func (m *Mux) loop() {
-	var players []*playerImpl
+	var players []*Player
 	for {
 		m.wait()
 
@@ -93,18 +94,18 @@ func (m *Mux) loop() {
 	}
 }
 
-func (m *Mux) addPlayer(player *playerImpl) {
+func (m *Mux) addPlayer(player *Player) {
 	m.cond.L.Lock()
 	defer m.cond.L.Unlock()
 
 	if m.players == nil {
-		m.players = map[*playerImpl]struct{}{}
+		m.players = map[*Player]struct{}{}
 	}
 	m.players[player] = struct{}{}
 	m.cond.Signal()
 }
 
-func (m *Mux) removePlayer(player *playerImpl) {
+func (m *Mux) removePlayer(player *Player) {
 	m.cond.L.Lock()
 	defer m.cond.L.Unlock()
 
@@ -115,7 +116,7 @@ func (m *Mux) removePlayer(player *playerImpl) {
 // ReadFloat32s fills buf with the multiplexed data of the players as float32 values.
 func (m *Mux) ReadFloat32s(buf []float32) {
 	m.cond.L.Lock()
-	players := make([]*playerImpl, 0, len(m.players))
+	players := make([]*Player, 0, len(m.players))
 	for p := range m.players {
 		players = append(players, p)
 	}
@@ -130,19 +131,7 @@ func (m *Mux) ReadFloat32s(buf []float32) {
 	m.cond.Signal()
 }
 
-type MuxPlayer struct {
-	p *playerImpl
-}
-
-type playerState int
-
-const (
-	playerPaused playerState = iota
-	playerPlay
-	playerClosed
-)
-
-type playerImpl struct {
+type Player struct {
 	mux        *Mux
 	src        AudioStream
 	prevVolume float64
@@ -157,36 +146,36 @@ type playerImpl struct {
 	m sync.Mutex
 }
 
-func (m *Mux) NewPlayer(src AudioStream) *MuxPlayer {
-	pl := &MuxPlayer{
-		p: &playerImpl{
-			mux:        m,
-			src:        src,
-			prevVolume: 1,
-			volume:     1,
-			bufferSize: m.defaultBufferSize(),
-		},
+type playerState int
+
+const (
+	playerPaused playerState = iota
+	playerPlay
+	playerClosed
+)
+
+func (m *Mux) NewPlayer(src AudioStream) *Player {
+	pl := &Player{
+		mux:        m,
+		src:        src,
+		prevVolume: 1,
+		volume:     1,
+		bufferSize: m.defaultBufferSize(),
 	}
-	runtime.SetFinalizer(pl, (*MuxPlayer).Close)
+	runtime.SetFinalizer(pl, (*Player).Close)
 	return pl
 }
 
-func (p *MuxPlayer) Err() error {
-	return p.p.Err()
-}
-
-func (p *playerImpl) Err() error {
+func (p *Player) Err() error {
 	p.m.Lock()
 	defer p.m.Unlock()
-
-	return p.err
+	if p.err != nil {
+		return fmt.Errorf("oto: audio error: %w", p.err)
+	}
+	return nil
 }
 
-func (p *MuxPlayer) Play() {
-	p.p.Play()
-}
-
-func (p *playerImpl) Play() {
+func (p *Player) Play() {
 	// Goroutines don't work effiently on Windows. Avoid using them (hajimehoshi/ebiten#1768).
 	if runtime.GOOS == "windows" {
 		p.m.Lock()
@@ -206,11 +195,7 @@ func (p *playerImpl) Play() {
 	}
 }
 
-func (p *MuxPlayer) SetBufferSize(bufferSize int) {
-	p.p.setBufferSize(bufferSize)
-}
-
-func (p *playerImpl) setBufferSize(bufferSize int) {
+func (p *Player) SetBufferSize(bufferSize int) {
 	p.m.Lock()
 	defer p.m.Unlock()
 
@@ -224,7 +209,7 @@ func (p *playerImpl) setBufferSize(bufferSize int) {
 	}
 }
 
-func (p *playerImpl) getTmpBuf() ([]float32, func()) {
+func (p *Player) getTmpBuf() ([]float32, func()) {
 	// The returned buffer could be accessed regardless of the mutex m (#254).
 	// In order to avoid races, use a sync.Pool.
 	// On the other hand, the calls of getTmpBuf itself should be protected by the mutex m,
@@ -256,7 +241,7 @@ func (p *playerImpl) getTmpBuf() ([]float32, func()) {
 // This avoids locking during an external function call Read (#188).
 //
 // When read is called, the mutex m must be locked.
-func (p *playerImpl) read(buf []float32) (int, error) {
+func (p *Player) read(buf []float32) (int, error) {
 	p.m.Unlock()
 	defer p.m.Lock()
 	return p.src.Read(buf)
@@ -265,7 +250,7 @@ func (p *playerImpl) read(buf []float32) (int, error) {
 // addToPlayers adds p to the players set.
 //
 // When addToPlayers is called, the mutex m must be locked.
-func (p *playerImpl) addToPlayers() {
+func (p *Player) addToPlayers() {
 	p.m.Unlock()
 	defer p.m.Lock()
 	p.mux.addPlayer(p)
@@ -274,13 +259,13 @@ func (p *playerImpl) addToPlayers() {
 // removeFromPlayers removes p from the players set.
 //
 // When removeFromPlayers is called, the mutex m must be locked.
-func (p *playerImpl) removeFromPlayers() {
+func (p *Player) removeFromPlayers() {
 	p.m.Unlock()
 	defer p.m.Lock()
 	p.mux.removePlayer(p)
 }
 
-func (p *playerImpl) playImpl() {
+func (p *Player) playImpl() {
 	if p.err != nil {
 		return
 	}
@@ -313,11 +298,7 @@ func (p *playerImpl) playImpl() {
 	p.addToPlayers()
 }
 
-func (p *MuxPlayer) Pause() {
-	p.p.Pause()
-}
-
-func (p *playerImpl) Pause() {
+func (p *Player) Pause() {
 	p.m.Lock()
 	defer p.m.Unlock()
 
@@ -327,11 +308,7 @@ func (p *playerImpl) Pause() {
 	p.state = playerPaused
 }
 
-func (p *MuxPlayer) Seek(offset int64, whence int) (int64, error) {
-	return p.p.Seek(offset, whence)
-}
-
-func (p *playerImpl) Seek(offset int64, whence int) (int64, error) {
+func (p *Player) Seek(offset int64, whence int) (int64, error) {
 	p.m.Lock()
 	defer p.m.Unlock()
 
@@ -351,17 +328,13 @@ func (p *playerImpl) Seek(offset int64, whence int) (int64, error) {
 	return s.Seek(offset, whence)
 }
 
-func (p *MuxPlayer) Reset() {
-	p.p.Reset()
-}
-
-func (p *playerImpl) Reset() {
+func (p *Player) Reset() {
 	p.m.Lock()
 	defer p.m.Unlock()
 	p.resetImpl()
 }
 
-func (p *playerImpl) resetImpl() {
+func (p *Player) resetImpl() {
 	if p.state == playerClosed {
 		return
 	}
@@ -370,55 +343,41 @@ func (p *playerImpl) resetImpl() {
 	p.eof = false
 }
 
-func (p *MuxPlayer) IsPlaying() bool {
-	return p.p.IsPlaying()
-}
-
-func (p *playerImpl) IsPlaying() bool {
+func (p *Player) IsPlaying() bool {
 	p.m.Lock()
 	defer p.m.Unlock()
 	return p.state == playerPlay
 }
 
-func (p *MuxPlayer) Volume() float64 {
-	return p.p.Volume()
-}
-
-func (p *playerImpl) Volume() float64 {
+func (p *Player) Volume() float64 {
 	p.m.Lock()
 	defer p.m.Unlock()
 	return p.volume
 }
 
-func (p *MuxPlayer) SetVolume(volume float64) {
-	p.p.SetVolume(volume)
+func (p *Player) SetVolume(volume float64) {
+	p.m.Lock()
+	defer p.m.Unlock()
+	p.volume = volume
+	if p.state != playerPlay {
+		p.prevVolume = volume
+	}
 }
 
-func (p *playerImpl) SetVolume(volume float64) {
-}
-
-func (p *MuxPlayer) BufferedSize() int {
-	return p.p.BufferedSize()
-}
-
-func (p *playerImpl) BufferedSize() int {
+func (p *Player) BufferedSize() int {
 	p.m.Lock()
 	defer p.m.Unlock()
 	return len(p.buf)
 }
 
-func (p *MuxPlayer) Close() error {
+func (p *Player) Close() error {
 	runtime.SetFinalizer(p, nil)
-	return p.p.Close()
-}
-
-func (p *playerImpl) Close() error {
 	p.m.Lock()
 	defer p.m.Unlock()
 	return p.closeImpl()
 }
 
-func (p *playerImpl) closeImpl() error {
+func (p *Player) closeImpl() error {
 	p.removeFromPlayers()
 
 	if p.state == playerClosed {
@@ -429,7 +388,7 @@ func (p *playerImpl) closeImpl() error {
 	return p.err
 }
 
-func (p *playerImpl) readBufferAndAdd(buf []float32) int {
+func (p *Player) readBufferAndAdd(buf []float32) int {
 	p.m.Lock()
 	defer p.m.Unlock()
 
@@ -472,7 +431,7 @@ func (p *playerImpl) readBufferAndAdd(buf []float32) int {
 	return n
 }
 
-func (p *playerImpl) canReadSourceToBuffer() bool {
+func (p *Player) canReadSourceToBuffer() bool {
 	p.m.Lock()
 	defer p.m.Unlock()
 
@@ -482,7 +441,7 @@ func (p *playerImpl) canReadSourceToBuffer() bool {
 	return len(p.buf) < p.bufferSize
 }
 
-func (p *playerImpl) readSourceToBuffer() int {
+func (p *Player) readSourceToBuffer() int {
 	p.m.Lock()
 	defer p.m.Unlock()
 
@@ -516,7 +475,7 @@ func (p *playerImpl) readSourceToBuffer() int {
 	return n
 }
 
-func (p *playerImpl) setErrorImpl(err error) {
+func (p *Player) setErrorImpl(err error) {
 	p.err = err
 	p.closeImpl()
 }
