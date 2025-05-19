@@ -1,4 +1,4 @@
-module github.com/ebitengine/oto/v3
+module github.com/Lundis/oto/v3
 
 go 1.23.0
 
