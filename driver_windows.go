@@ -40,7 +40,7 @@ func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*conte
 	ctx := &context{
 		sampleRate:   sampleRate,
 		channelCount: channelCount,
-		mux:          New(sampleRate, channelCount),
+		mux:          NewMux(sampleRate, channelCount),
 		ready:        make(chan struct{}),
 	}
 

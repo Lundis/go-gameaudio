@@ -33,8 +33,8 @@ type Mux struct {
 	cond    *sync.Cond
 }
 
-// New creates a new Mux.
-func New(sampleRate int, channelCount int) *Mux {
+// NewMux creates a new Mux.
+func NewMux(sampleRate int, channelCount int) *Mux {
 	m := &Mux{
 		sampleRate:   sampleRate,
 		channelCount: channelCount,

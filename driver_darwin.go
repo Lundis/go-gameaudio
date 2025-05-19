@@ -22,8 +22,6 @@ import (
 	"unsafe"
 
 	"github.com/ebitengine/purego/objc"
-
-	"github.com/Lundis/oto/v3/internal/mux"
 )
 
 const (
@@ -82,7 +80,7 @@ type context struct {
 	toPause  bool
 	toResume bool
 
-	mux *mux.Mux
+	mux *Mux
 	err atomicError
 }
 
@@ -91,7 +89,7 @@ type context struct {
 
 var theContext *context
 
-func newContext(sampleRate int, channelCount int, format mux.Format, bufferSizeInBytes int) (*context, chan struct{}, error) {
+func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*context, chan struct{}, error) {
 	// defaultOneBufferSizeInBytes is the default buffer size in bytes.
 	//
 	// 12288 seems necessary at least on iPod touch (7th) and MacBook Pro 2020.
@@ -112,7 +110,7 @@ func newContext(sampleRate int, channelCount int, format mux.Format, bufferSizeI
 
 	c := &context{
 		cond:                 sync.NewCond(&sync.Mutex{}),
-		mux:                  mux.New(sampleRate, channelCount, format),
+		mux:                  NewMux(sampleRate, channelCount),
 		oneBufferSizeInBytes: oneBufferSizeInBytes,
 	}
 	theContext = c

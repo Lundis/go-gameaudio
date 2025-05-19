@@ -15,12 +15,11 @@
 package oto_test
 
 import (
-	"bytes"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/ebitengine/oto/v3"
+	"github.com/Lundis/oto/v3"
 )
 
 var theContext *oto.Context
@@ -29,7 +28,6 @@ func TestMain(m *testing.M) {
 	op := &oto.NewContextOptions{}
 	op.SampleRate = 48000
 	op.ChannelCount = 2
-	op.Format = oto.FormatFloat32LE
 	ctx, ready, err := oto.NewContext(op)
 	if err != nil {
 		panic(err)
@@ -40,7 +38,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestEmptyPlayer(t *testing.T) {
-	bs := bytes.NewReader(make([]byte, 0))
+	bs := oto.NewMemoryReader(make([]float32, 0))
 	p := theContext.NewPlayer(bs)
 	p.Play()
 	for p.IsPlaying() {
@@ -51,10 +49,10 @@ func TestEmptyPlayer(t *testing.T) {
 // Issue #258
 func TestSetBufferSize(t *testing.T) {
 	for i := 0; i < 10; i++ {
-		bs := bytes.NewReader(make([]byte, 512))
+		bs := oto.NewMemoryReader(make([]float32, 128))
 		p := theContext.NewPlayer(bs)
 		p.Play()
-		p.SetBufferSize(256)
+		p.SetBufferSize(64)
 		for p.IsPlaying() {
 			time.Sleep(time.Millisecond)
 		}

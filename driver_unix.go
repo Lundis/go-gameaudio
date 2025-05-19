@@ -26,8 +26,6 @@ import (
 	"strings"
 	"sync"
 	"unsafe"
-
-	"github.com/Lundis/oto/v3/internal/mux"
 )
 
 type context struct {
@@ -39,7 +37,7 @@ type context struct {
 
 	cond *sync.Cond
 
-	mux *mux.Mux
+	mux *Mux
 	err atomicError
 
 	ready chan struct{}
@@ -106,11 +104,11 @@ func deviceCandidates() []string {
 	return devices
 }
 
-func newContext(sampleRate int, channelCount int, format mux.Format, bufferSizeInBytes int) (*context, chan struct{}, error) {
+func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*context, chan struct{}, error) {
 	c := &context{
 		channelCount: channelCount,
 		cond:         sync.NewCond(&sync.Mutex{}),
-		mux:          mux.New(sampleRate, channelCount, format),
+		mux:          NewMux(sampleRate, channelCount),
 		ready:        make(chan struct{}),
 	}
 	theContext = c

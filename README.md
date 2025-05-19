@@ -57,7 +57,7 @@ Add them to "Linked Frameworks and Libraries" on your Xcode project.
 ALSA is required. On Ubuntu or Debian, run this command:
 
 ```sh
-apt install libasound2-dev
+apt install libasound2-dev gcc pkg-config
 ```
 
 On RedHat-based linux distributions, run:
