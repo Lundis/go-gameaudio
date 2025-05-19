@@ -24,8 +24,6 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
-
-	"github.com/ebitengine/oto/v3/internal/mux"
 )
 
 type comThread struct {
@@ -74,7 +72,7 @@ func (c *comThread) Run(f func()) {
 type wasapiContext struct {
 	sampleRate        int
 	channelCount      int
-	mux               *mux.Mux
+	mux               *Mux
 	bufferSizeInBytes int
 
 	comThread     *comThread
@@ -99,7 +97,7 @@ var (
 	errFormatNotSupported = errors.New("oto: the specified format is not supported (there is the closest format instead)")
 )
 
-func newWASAPIContext(sampleRate, channelCount int, mux *mux.Mux, bufferSizeInBytes int) (context *wasapiContext, ferr error) {
+func newWASAPIContext(sampleRate, channelCount int, mux *Mux, bufferSizeInBytes int) (context *wasapiContext, ferr error) {
 	t, err := newCOMThread()
 	if err != nil {
 		return nil, err

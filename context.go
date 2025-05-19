@@ -16,11 +16,8 @@ package oto
 
 import (
 	"fmt"
-	"io"
 	"sync"
 	"time"
-
-	"github.com/ebitengine/oto/v3/internal/mux"
 )
 
 var (
@@ -38,20 +35,6 @@ type Context struct {
 	context *context
 }
 
-// Format is the format of sources.
-type Format int
-
-const (
-	// FormatFloat32LE is the format of 32 bits floats little endian.
-	FormatFloat32LE Format = iota
-
-	// FormatUnsignedInt8 is the format of 8 bits integers.
-	FormatUnsignedInt8
-
-	//FormatSignedInt16LE is the format of 16 bits integers little endian.
-	FormatSignedInt16LE
-)
-
 // NewContextOptions represents options for NewContext.
 type NewContextOptions struct {
 	// SampleRate specifies the number of samples that should be played during one second.
@@ -62,9 +45,6 @@ type NewContextOptions struct {
 	// ChannelCount specifies the number of channels. One channel is mono playback. Two
 	// channels are stereo playback. No other values are supported.
 	ChannelCount int
-
-	// Format specifies the format of sources.
-	Format Format
 
 	// BufferSize specifies a buffer size in the underlying device.
 	//
@@ -97,7 +77,7 @@ func NewContext(options *NewContextOptions) (*Context, chan struct{}, error) {
 		bufferSizeInBytes = int(int64(options.BufferSize) * int64(bytesPerSecond) / int64(time.Second))
 		bufferSizeInBytes = bufferSizeInBytes / bytesPerSample * bytesPerSample
 	}
-	ctx, ready, err := newContext(options.SampleRate, options.ChannelCount, mux.Format(options.Format), bufferSizeInBytes)
+	ctx, ready, err := newContext(options.SampleRate, options.ChannelCount, bufferSizeInBytes)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -134,7 +114,7 @@ func NewContext(options *NewContextOptions) (*Context, chan struct{}, error) {
 // NewPlayer is concurrent-safe.
 //
 // All the functions of a Player returned by NewPlayer are concurrent-safe.
-func (c *Context) NewPlayer(r io.Reader) *Player {
+func (c *Context) NewPlayer(r AudioStream) *Player {
 	return &Player{
 		player: c.context.mux.NewPlayer(r),
 	}

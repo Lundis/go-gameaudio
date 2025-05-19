@@ -16,13 +16,11 @@ package oto
 
 import (
 	"fmt"
-
-	"github.com/ebitengine/oto/v3/internal/mux"
 )
 
 // Player is a PCM (pulse-code modulation) audio player.
 type Player struct {
-	player *mux.Player
+	player *MuxPlayer
 }
 
 // Pause pauses its playing.

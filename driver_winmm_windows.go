@@ -22,8 +22,6 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
-
-	"github.com/ebitengine/oto/v3/internal/mux"
 )
 
 // Avoid goroutines on Windows (hajimehoshi/ebiten#1768).
@@ -78,7 +76,7 @@ type winmmContext struct {
 
 	buf32 []float32
 
-	mux       *mux.Mux
+	mux       *Mux
 	err       atomicError
 	loopEndCh chan error
 
@@ -90,7 +88,7 @@ type winmmContext struct {
 
 var theWinMMContext *winmmContext
 
-func newWinMMContext(sampleRate, channelCount int, mux *mux.Mux, bufferSizeInBytes int) (*winmmContext, error) {
+func newWinMMContext(sampleRate, channelCount int, mux *Mux, bufferSizeInBytes int) (*winmmContext, error) {
 	// winmm.dll is not available on Xbox.
 	if err := winmm.Load(); err != nil {
 		return nil, fmt.Errorf("oto: loading winmm.dll failed: %w", err)

@@ -18,8 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/ebitengine/oto/v3/internal/mux"
 )
 
 var errDeviceNotFound = errors.New("oto: device not found")
@@ -28,7 +26,7 @@ type context struct {
 	sampleRate   int
 	channelCount int
 
-	mux *mux.Mux
+	mux *Mux
 
 	wasapiContext *wasapiContext
 	winmmContext  *winmmContext
@@ -38,11 +36,11 @@ type context struct {
 	err   atomicError
 }
 
-func newContext(sampleRate int, channelCount int, format mux.Format, bufferSizeInBytes int) (*context, chan struct{}, error) {
+func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*context, chan struct{}, error) {
 	ctx := &context{
 		sampleRate:   sampleRate,
 		channelCount: channelCount,
-		mux:          mux.New(sampleRate, channelCount, format),
+		mux:          New(sampleRate, channelCount),
 		ready:        make(chan struct{}),
 	}
 
@@ -128,13 +126,13 @@ type nullContext struct {
 	suspended bool
 }
 
-func newNullContext(sampleRate int, channelCount int, mux *mux.Mux) *nullContext {
+func newNullContext(sampleRate int, channelCount int, mux *Mux) *nullContext {
 	c := &nullContext{}
 	go c.loop(sampleRate, channelCount, mux)
 	return c
 }
 
-func (c *nullContext) loop(sampleRate int, channelCount int, mux *mux.Mux) {
+func (c *nullContext) loop(sampleRate int, channelCount int, mux *Mux) {
 	var buf32 [4096]float32
 	sleep := time.Duration(float64(time.Second) * float64(len(buf32)) / float64(channelCount) / float64(sampleRate))
 	for {

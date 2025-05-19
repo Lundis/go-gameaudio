@@ -14,55 +14,30 @@
 
 // Package mux offers APIs for a low-level multiplexer of audio players.
 // Usually you don't have to use this package directly.
-package mux
+package oto
 
 import (
 	"errors"
-	"fmt"
 	"io"
-	"math"
 	"runtime"
 	"sync"
 	"time"
 )
 
-// Format must sync with oto's Format.
-type Format int
-
-const (
-	FormatFloat32LE Format = iota
-	FormatUnsignedInt8
-	FormatSignedInt16LE
-)
-
-func (f Format) ByteLength() int {
-	switch f {
-	case FormatFloat32LE:
-		return 4
-	case FormatUnsignedInt8:
-		return 1
-	case FormatSignedInt16LE:
-		return 2
-	}
-	panic(fmt.Sprintf("mux: unexpected format: %d", f))
-}
-
 // Mux is a low-level multiplexer of audio players.
 type Mux struct {
 	sampleRate   int
 	channelCount int
-	format       Format
 
 	players map[*playerImpl]struct{}
 	cond    *sync.Cond
 }
 
 // New creates a new Mux.
-func New(sampleRate int, channelCount int, format Format) *Mux {
+func New(sampleRate int, channelCount int) *Mux {
 	m := &Mux{
 		sampleRate:   sampleRate,
 		channelCount: channelCount,
-		format:       format,
 		cond:         sync.NewCond(&sync.Mutex{}),
 	}
 	go m.loop()
@@ -155,7 +130,7 @@ func (m *Mux) ReadFloat32s(buf []float32) {
 	m.cond.Signal()
 }
 
-type Player struct {
+type MuxPlayer struct {
 	p *playerImpl
 }
 
@@ -169,21 +144,21 @@ const (
 
 type playerImpl struct {
 	mux        *Mux
-	src        io.Reader
+	src        AudioStream
 	prevVolume float64
 	volume     float64
 	err        error
 	state      playerState
 	bufPool    *sync.Pool
-	buf        []byte
+	buf        []float32
 	eof        bool
 	bufferSize int
 
 	m sync.Mutex
 }
 
-func (m *Mux) NewPlayer(src io.Reader) *Player {
-	pl := &Player{
+func (m *Mux) NewPlayer(src AudioStream) *MuxPlayer {
+	pl := &MuxPlayer{
 		p: &playerImpl{
 			mux:        m,
 			src:        src,
@@ -192,11 +167,11 @@ func (m *Mux) NewPlayer(src io.Reader) *Player {
 			bufferSize: m.defaultBufferSize(),
 		},
 	}
-	runtime.SetFinalizer(pl, (*Player).Close)
+	runtime.SetFinalizer(pl, (*MuxPlayer).Close)
 	return pl
 }
 
-func (p *Player) Err() error {
+func (p *MuxPlayer) Err() error {
 	return p.p.Err()
 }
 
@@ -207,7 +182,7 @@ func (p *playerImpl) Err() error {
 	return p.err
 }
 
-func (p *Player) Play() {
+func (p *MuxPlayer) Play() {
 	p.p.Play()
 }
 
@@ -231,7 +206,7 @@ func (p *playerImpl) Play() {
 	}
 }
 
-func (p *Player) SetBufferSize(bufferSize int) {
+func (p *MuxPlayer) SetBufferSize(bufferSize int) {
 	p.p.setBufferSize(bufferSize)
 }
 
@@ -249,7 +224,7 @@ func (p *playerImpl) setBufferSize(bufferSize int) {
 	}
 }
 
-func (p *playerImpl) getTmpBuf() ([]byte, func()) {
+func (p *playerImpl) getTmpBuf() ([]float32, func()) {
 	// The returned buffer could be accessed regardless of the mutex m (#254).
 	// In order to avoid races, use a sync.Pool.
 	// On the other hand, the calls of getTmpBuf itself should be protected by the mutex m,
@@ -257,12 +232,12 @@ func (p *playerImpl) getTmpBuf() ([]byte, func()) {
 	if p.bufPool == nil {
 		p.bufPool = &sync.Pool{
 			New: func() interface{} {
-				buf := make([]byte, p.bufferSize)
+				buf := make([]float32, p.bufferSize)
 				return &buf
 			},
 		}
 	}
-	buf := p.bufPool.Get().(*[]byte)
+	buf := p.bufPool.Get().(*[]float32)
 	return *buf, func() {
 		// p.bufPool could be nil when setBufferSize is called (#258).
 		// buf doesn't have to (or cannot) be put back to the pool, as the size of the buffer could be changed.
@@ -281,7 +256,7 @@ func (p *playerImpl) getTmpBuf() ([]byte, func()) {
 // This avoids locking during an external function call Read (#188).
 //
 // When read is called, the mutex m must be locked.
-func (p *playerImpl) read(buf []byte) (int, error) {
+func (p *playerImpl) read(buf []float32) (int, error) {
 	p.m.Unlock()
 	defer p.m.Lock()
 	return p.src.Read(buf)
@@ -338,7 +313,7 @@ func (p *playerImpl) playImpl() {
 	p.addToPlayers()
 }
 
-func (p *Player) Pause() {
+func (p *MuxPlayer) Pause() {
 	p.p.Pause()
 }
 
@@ -352,7 +327,7 @@ func (p *playerImpl) Pause() {
 	p.state = playerPaused
 }
 
-func (p *Player) Seek(offset int64, whence int) (int64, error) {
+func (p *MuxPlayer) Seek(offset int64, whence int) (int64, error) {
 	return p.p.Seek(offset, whence)
 }
 
@@ -376,7 +351,7 @@ func (p *playerImpl) Seek(offset int64, whence int) (int64, error) {
 	return s.Seek(offset, whence)
 }
 
-func (p *Player) Reset() {
+func (p *MuxPlayer) Reset() {
 	p.p.Reset()
 }
 
@@ -395,7 +370,7 @@ func (p *playerImpl) resetImpl() {
 	p.eof = false
 }
 
-func (p *Player) IsPlaying() bool {
+func (p *MuxPlayer) IsPlaying() bool {
 	return p.p.IsPlaying()
 }
 
@@ -405,7 +380,7 @@ func (p *playerImpl) IsPlaying() bool {
 	return p.state == playerPlay
 }
 
-func (p *Player) Volume() float64 {
+func (p *MuxPlayer) Volume() float64 {
 	return p.p.Volume()
 }
 
@@ -415,20 +390,14 @@ func (p *playerImpl) Volume() float64 {
 	return p.volume
 }
 
-func (p *Player) SetVolume(volume float64) {
+func (p *MuxPlayer) SetVolume(volume float64) {
 	p.p.SetVolume(volume)
 }
 
 func (p *playerImpl) SetVolume(volume float64) {
-	p.m.Lock()
-	defer p.m.Unlock()
-	p.volume = volume
-	if p.state != playerPlay {
-		p.prevVolume = volume
-	}
 }
 
-func (p *Player) BufferedSize() int {
+func (p *MuxPlayer) BufferedSize() int {
 	return p.p.BufferedSize()
 }
 
@@ -438,7 +407,7 @@ func (p *playerImpl) BufferedSize() int {
 	return len(p.buf)
 }
 
-func (p *Player) Close() error {
+func (p *MuxPlayer) Close() error {
 	runtime.SetFinalizer(p, nil)
 	return p.p.Close()
 }
@@ -468,9 +437,7 @@ func (p *playerImpl) readBufferAndAdd(buf []float32) int {
 		return 0
 	}
 
-	format := p.mux.format
-	bitDepthInBytes := format.ByteLength()
-	n := len(p.buf) / bitDepthInBytes
+	n := len(p.buf)
 	if n > len(buf) {
 		n = len(buf)
 	}
@@ -478,29 +445,14 @@ func (p *playerImpl) readBufferAndAdd(buf []float32) int {
 	prevVolume := float32(p.prevVolume)
 	volume := float32(p.volume)
 
-	channelCount := p.mux.channelCount
-	rateDenom := float32(n / channelCount)
-
-	src := p.buf[:n*bitDepthInBytes]
+	src := p.buf[:n]
 
 	for i := 0; i < n; i++ {
-		var v float32
-		switch format {
-		case FormatFloat32LE:
-			v = math.Float32frombits(uint32(src[4*i]) | uint32(src[4*i+1])<<8 | uint32(src[4*i+2])<<16 | uint32(src[4*i+3])<<24)
-		case FormatUnsignedInt8:
-			v8 := src[i]
-			v = float32(v8-(1<<7)) / (1 << 7)
-		case FormatSignedInt16LE:
-			v16 := int16(src[2*i]) | (int16(src[2*i+1]) << 8)
-			v = float32(v16) / (1 << 15)
-		default:
-			panic(fmt.Sprintf("mux: unexpected format: %d", format))
-		}
+		var v = src[i]
 		if volume == prevVolume {
 			buf[i] += v * volume
 		} else {
-			rate := float32(i/channelCount) / rateDenom
+			rate := float32(i) / float32(n)
 			if rate > 1 {
 				rate = 1
 			}
@@ -510,8 +462,8 @@ func (p *playerImpl) readBufferAndAdd(buf []float32) int {
 
 	p.prevVolume = p.volume
 
-	copy(p.buf, p.buf[n*bitDepthInBytes:])
-	p.buf = p.buf[:len(p.buf)-n*bitDepthInBytes]
+	copy(p.buf, p.buf[n:])
+	p.buf = p.buf[:len(p.buf)-n]
 
 	if p.eof && len(p.buf) == 0 {
 		p.state = playerPaused
@@ -574,8 +526,6 @@ func (p *playerImpl) setErrorImpl(err error) {
 // defaultBufferSize returns the default size of the buffer for the audio source.
 // This buffer is used when unreading on pausing the player.
 func (m *Mux) defaultBufferSize() int {
-	bytesPerSample := m.channelCount * m.format.ByteLength()
-	s := m.sampleRate * bytesPerSample / 2 // 0.5[s]
-	// Align s in multiples of bytes per sample, or a buffer could have extra bytes.
-	return s / bytesPerSample * bytesPerSample
+	s := m.sampleRate * m.channelCount / 2 // 0.5[s]
+	return s
 }
