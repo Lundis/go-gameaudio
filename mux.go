@@ -132,6 +132,6 @@ func (m *Mux) ReadFloat32s(buf []float32) {
 // defaultBufferSize returns the default size of the buffer for the audio source.
 // This buffer is used when unreading on pausing the player.
 func (m *Mux) defaultBufferSize() int {
-	s := m.sampleRate * m.channelCount / 2 // 0.5[s]
+	s := m.sampleRate * m.channelCount / 20 // 50ms
 	return s
 }
