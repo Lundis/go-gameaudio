@@ -15,20 +15,19 @@
 package oto
 
 import (
-	"github.com/Lundis/oto/v3/internal/mux"
-	"github.com/ebitengine/oto/v3/internal/oboe"
+	"github.com/Lundis/oto/v3/internal/oboe"
 )
 
 type context struct {
-	mux *mux.Mux
+	mux *Mux
 }
 
-func newContext(sampleRate int, channelCount int, format mux.Format, bufferSizeInBytes int) (*context, chan struct{}, error) {
+func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*context, chan struct{}, error) {
 	ready := make(chan struct{})
 	close(ready)
 
 	c := &context{
-		mux: mux.New(sampleRate, channelCount, format),
+		mux: NewMux(sampleRate, channelCount),
 	}
 	if err := oboe.Play(sampleRate, channelCount, c.mux.ReadFloat32s, bufferSizeInBytes); err != nil {
 		return nil, nil, err

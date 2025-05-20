@@ -20,8 +20,6 @@ import (
 	"runtime"
 	"syscall/js"
 	"unsafe"
-
-	"github.com/Lundis/oto/v3/internal/mux"
 )
 
 type context struct {
@@ -30,10 +28,10 @@ type context struct {
 	scriptProcessorCallback js.Func
 	ready                   bool
 
-	mux *mux.Mux
+	mux *Mux
 }
 
-func newContext(sampleRate int, channelCount int, format mux.Format, bufferSizeInBytes int) (*context, chan struct{}, error) {
+func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*context, chan struct{}, error) {
 	ready := make(chan struct{})
 
 	class := js.Global().Get("AudioContext")
@@ -48,7 +46,7 @@ func newContext(sampleRate int, channelCount int, format mux.Format, bufferSizeI
 
 	d := &context{
 		audioContext: class.New(options),
-		mux:          mux.New(sampleRate, channelCount, format),
+		mux:          NewMux(sampleRate, channelCount, format),
 	}
 
 	if bufferSizeInBytes == 0 {

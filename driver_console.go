@@ -31,8 +31,6 @@ import "C"
 
 import (
 	"unsafe"
-
-	"github.com/Lundis/oto/v3/internal/mux"
 )
 
 //export oto_OnReadCallback
@@ -41,17 +39,17 @@ func oto_OnReadCallback(buf *C.float, length C.size_t) {
 }
 
 type context struct {
-	mux *mux.Mux
+	mux *Mux
 }
 
 var theContext *context
 
-func newContext(sampleRate int, channelCount int, format mux.Format, bufferSizeInBytes int) (*context, chan struct{}, error) {
+func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*context, chan struct{}, error) {
 	ready := make(chan struct{})
 	close(ready)
 
 	c := &context{
-		mux: mux.New(sampleRate, channelCount, format),
+		mux: NewMux(sampleRate, channelCount),
 	}
 	theContext = c
 	C.oto_OpenAudioProxy(C.int(sampleRate), C.int(channelCount), C.int(bufferSizeInBytes))
