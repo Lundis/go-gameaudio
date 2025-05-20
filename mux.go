@@ -18,7 +18,6 @@ package oto
 
 import (
 	"sync"
-	"time"
 )
 
 // Mux is a low-level multiplexer of audio players.
@@ -37,57 +36,7 @@ func NewMux(sampleRate int, channelCount int) *Mux {
 		channelCount: channelCount,
 		cond:         sync.NewCond(&sync.Mutex{}),
 	}
-	go m.loop()
 	return m
-}
-
-func (m *Mux) shouldWait() bool {
-	for p := range m.players {
-		if p.canReadSourceToBuffer() {
-			return false
-		}
-	}
-	return true
-}
-
-func (m *Mux) wait() {
-	m.cond.L.Lock()
-	defer m.cond.L.Unlock()
-
-	for m.shouldWait() {
-		m.cond.Wait()
-	}
-}
-
-func (m *Mux) loop() {
-	var players []*Player
-	for {
-		m.wait()
-
-		m.cond.L.Lock()
-		for i := range players {
-			players[i] = nil
-		}
-		players = players[:0]
-		for p := range m.players {
-			players = append(players, p)
-		}
-		m.cond.L.Unlock()
-
-		allZero := true
-		for _, p := range players {
-			n := p.readSourceToBuffer()
-			if n != 0 {
-				allZero = false
-			}
-		}
-
-		// Sleeping is necessary especially on browsers.
-		// Sometimes a player continues to read 0 bytes from the source and this loop can be a busy loop in such case.
-		if allZero {
-			time.Sleep(time.Millisecond)
-		}
-	}
 }
 
 func (m *Mux) addPlayer(player *Player) {
@@ -118,9 +67,7 @@ func (m *Mux) ReadFloat32s(buf []float32) {
 	}
 	m.cond.L.Unlock()
 
-	for i := range buf {
-		buf[i] = 0
-	}
+	clear(buf)
 	for _, p := range players {
 		p.readBufferAndAdd(buf)
 	}

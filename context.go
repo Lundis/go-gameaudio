@@ -114,8 +114,8 @@ func NewContext(options *NewContextOptions) (*Context, chan struct{}, error) {
 // NewPlayer is concurrent-safe.
 //
 // All the functions of a Player returned by NewPlayer are concurrent-safe.
-func (c *Context) NewPlayer(r AudioStream) *Player {
-	return c.context.mux.NewPlayer(r)
+func (c *Context) NewPlayer(data []float32, volume float32, channel ChannelId) *Player {
+	return c.context.mux.NewPlayer(data, volume, channel)
 }
 
 // Suspend suspends the entire audio play.
@@ -137,23 +137,4 @@ func (c *Context) Resume() error {
 // Err is concurrent-safe.
 func (c *Context) Err() error {
 	return c.context.Err()
-}
-
-type atomicError struct {
-	err error
-	m   sync.Mutex
-}
-
-func (a *atomicError) TryStore(err error) {
-	a.m.Lock()
-	defer a.m.Unlock()
-	if a.err == nil {
-		a.err = err
-	}
-}
-
-func (a *atomicError) Load() error {
-	a.m.Lock()
-	defer a.m.Unlock()
-	return a.err
 }

@@ -15,358 +15,175 @@
 package oto
 
 import (
-	"errors"
-	"fmt"
-	"io"
-	"runtime"
 	"sync"
+	"time"
 )
 
-type Player struct {
-	mux        *Mux
-	src        AudioStream
-	prevVolume float64
-	volume     float64
-	err        error
-	state      playerState
-	bufPool    *sync.Pool
-	buf        []float32
-	eof        bool
-	bufferSize int
-
-	m sync.Mutex
+type playInstance struct {
+	pos             int
+	fadeInEndsAt    int
+	fadeOutStartsAt int
 }
 
-type playerState int
+type Player struct {
+	mux           *Mux
+	data          []float32
+	playInstances []*playInstance
+	channelId     ChannelId
+	volume        float32
+	m             sync.Mutex
+	throttlingMs  int
+	loop          bool
+	loopedOnce    bool
+}
 
-const (
-	playerPaused playerState = iota
-	playerPlay
-	playerClosed
-)
-
-func (m *Mux) NewPlayer(src AudioStream) *Player {
+func (m *Mux) NewPlayer(data []float32, volume float32, channel ChannelId) *Player {
 	pl := &Player{
-		mux:        m,
-		src:        src,
-		prevVolume: 1,
-		volume:     1,
-		bufferSize: m.defaultBufferSize(),
+		mux:          m,
+		data:         data,
+		volume:       volume,
+		channelId:    channel,
+		throttlingMs: 50,
 	}
-	runtime.SetFinalizer(pl, (*Player).Close)
 	return pl
 }
 
-func (p *Player) Err() error {
-	p.m.Lock()
-	defer p.m.Unlock()
-	if p.err != nil {
-		return fmt.Errorf("oto: audio error: %w", p.err)
-	}
-	return nil
-}
-
 func (p *Player) Play() {
-	// Goroutines don't work effiently on Windows. Avoid using them (hajimehoshi/ebiten#1768).
-	if runtime.GOOS == "windows" {
-		p.m.Lock()
-		defer p.m.Unlock()
-
-		p.playImpl()
-	} else {
-		ch := make(chan struct{})
-		go func() {
-			p.m.Lock()
-			defer p.m.Unlock()
-
-			close(ch)
-			p.playImpl()
-		}()
-		<-ch
-	}
-}
-
-func (p *Player) SetBufferSize(bufferSize int) {
 	p.m.Lock()
-	defer p.m.Unlock()
-
-	orig := p.bufferSize
-	p.bufferSize = bufferSize
-	if bufferSize == 0 {
-		p.bufferSize = p.mux.defaultBufferSize()
-	}
-	if orig != p.bufferSize {
-		p.bufPool = nil
-	}
+	p.playImpl(0, len(p.data))
+	p.m.Unlock()
 }
 
-func (p *Player) getTmpBuf() ([]float32, func()) {
-	// The returned buffer could be accessed regardless of the mutex m (#254).
-	// In order to avoid races, use a sync.Pool.
-	// On the other hand, the calls of getTmpBuf itself should be protected by the mutex m,
-	// then accessing p.bufPool doesn't cause races.
-	if p.bufPool == nil {
-		p.bufPool = &sync.Pool{
-			New: func() interface{} {
-				buf := make([]float32, p.bufferSize)
-				return &buf
-			},
-		}
+func (p *Player) Stop() {
+	p.m.Lock()
+	p.loop = false
+	p.playInstances = p.playInstances[:0]
+	p.m.Unlock()
+}
+
+func (p *Player) PlayLoop(crossFade time.Duration) {
+	if p.loop {
+		return
 	}
-	buf := p.bufPool.Get().(*[]float32)
-	return *buf, func() {
-		// p.bufPool could be nil when setBufferSize is called (#258).
-		// buf doesn't have to (or cannot) be put back to the pool, as the size of the buffer could be changed.
-		if p.bufPool == nil {
+	p.m.Lock()
+	p.loop = true
+	fadeDuration := int(float64(p.mux.channelCount*p.mux.sampleRate) * crossFade.Seconds())
+	p.playImpl(fadeDuration, len(p.data)-fadeDuration)
+	p.m.Unlock()
+}
+
+func (p *Player) PlayFadeIn(fadeIn time.Duration) {
+	p.m.Lock()
+	p.playImpl(int(float64(p.mux.channelCount*p.mux.sampleRate)*fadeIn.Seconds()), len(p.data))
+	p.m.Unlock()
+}
+
+func (p *Player) SetThrottlingMs(ms int) {
+	p.m.Lock()
+	p.throttlingMs = ms
+	p.m.Unlock()
+}
+
+func (p *Player) playImpl(fadeInEndsAt int, fadeOutStartsAt int) {
+	// re-use an existing play slot if possible
+	var freeInstance *playInstance
+	for _, pi := range p.playInstances {
+		if pi.pos < p.mux.sampleRate*p.mux.channelCount*p.throttlingMs/1000 && !p.loop {
+			// don't start playing again until throttlingMs has passed
 			return
 		}
-		if len(*buf) != p.bufferSize {
-			return
+		if pi.pos >= len(p.data) || p.loop {
+			freeInstance = pi
+			break
 		}
-		p.bufPool.Put(buf)
 	}
-}
+	if freeInstance == nil {
+		freeInstance = &playInstance{}
+		p.playInstances = append(p.playInstances, freeInstance)
+	}
+	// when looping, don't reset the currently playing instance
+	if !p.loop {
+		freeInstance.pos = 0
+	}
+	freeInstance.fadeInEndsAt = fadeInEndsAt
+	freeInstance.fadeOutStartsAt = fadeOutStartsAt
 
-// read reads the source to buf.
-// read unlocks the mutex temporarily and locks when reading finishes.
-// This avoids locking during an external function call Read (#188).
-//
-// When read is called, the mutex m must be locked.
-func (p *Player) read(buf []float32) (int, error) {
-	p.m.Unlock()
-	defer p.m.Lock()
-	return p.src.Read(buf)
-}
-
-// addToPlayers adds p to the players set.
-//
-// When addToPlayers is called, the mutex m must be locked.
-func (p *Player) addToPlayers() {
-	p.m.Unlock()
-	defer p.m.Lock()
 	p.mux.addPlayer(p)
-}
-
-// removeFromPlayers removes p from the players set.
-//
-// When removeFromPlayers is called, the mutex m must be locked.
-func (p *Player) removeFromPlayers() {
-	p.m.Unlock()
-	defer p.m.Lock()
-	p.mux.removePlayer(p)
-}
-
-func (p *Player) playImpl() {
-	if p.err != nil {
-		return
-	}
-	if p.state != playerPaused {
-		return
-	}
-	p.state = playerPlay
-
-	if !p.eof {
-		buf, free := p.getTmpBuf()
-		defer free()
-		for len(p.buf) < p.bufferSize {
-			n, err := p.read(buf)
-			if err != nil && err != io.EOF {
-				p.setErrorImpl(err)
-				return
-			}
-			p.buf = append(p.buf, buf[:n]...)
-			if err == io.EOF {
-				p.eof = true
-				break
-			}
-		}
-	}
-
-	if p.eof && len(p.buf) == 0 {
-		p.state = playerPaused
-	}
-
-	p.addToPlayers()
-}
-
-func (p *Player) Pause() {
-	p.m.Lock()
-	defer p.m.Unlock()
-
-	if p.state != playerPlay {
-		return
-	}
-	p.state = playerPaused
-}
-
-func (p *Player) Seek(offset int64, whence int) (int64, error) {
-	p.m.Lock()
-	defer p.m.Unlock()
-
-	// If a player is playing, keep playing even after this seeking.
-	if p.state == playerPlay {
-		defer p.playImpl()
-	}
-
-	// Reset the internal buffer.
-	p.resetImpl()
-
-	// Check if the source implements io.Seeker.
-	s, ok := p.src.(io.Seeker)
-	if !ok {
-		return 0, errors.New("mux: the source must implement io.Seeker")
-	}
-	return s.Seek(offset, whence)
 }
 
 func (p *Player) Reset() {
 	p.m.Lock()
-	defer p.m.Unlock()
-	p.resetImpl()
-}
-
-func (p *Player) resetImpl() {
-	if p.state == playerClosed {
-		return
-	}
-	p.state = playerPaused
-	p.buf = p.buf[:0]
-	p.eof = false
+	p.playInstances = p.playInstances[:0]
+	p.m.Unlock()
 }
 
 func (p *Player) IsPlaying() bool {
 	p.m.Lock()
 	defer p.m.Unlock()
-	return p.state == playerPlay
-}
 
-func (p *Player) Volume() float64 {
-	p.m.Lock()
-	defer p.m.Unlock()
-	return p.volume
-}
-
-func (p *Player) SetVolume(volume float64) {
-	p.m.Lock()
-	defer p.m.Unlock()
-	p.volume = volume
-	if p.state != playerPlay {
-		p.prevVolume = volume
+	for _, i := range p.playInstances {
+		if i.pos < len(p.data) {
+			return true
+		}
 	}
+	return false
 }
 
-func (p *Player) BufferedSize() int {
-	p.m.Lock()
-	defer p.m.Unlock()
-	return len(p.buf)
-}
-
-func (p *Player) Close() error {
-	runtime.SetFinalizer(p, nil)
-	p.m.Lock()
-	defer p.m.Unlock()
-	return p.closeImpl()
-}
-
-func (p *Player) closeImpl() error {
-	p.removeFromPlayers()
-
-	if p.state == playerClosed {
-		return p.err
-	}
-	p.state = playerClosed
-	p.buf = nil
-	return p.err
-}
-
-func (p *Player) readBufferAndAdd(buf []float32) int {
-	p.m.Lock()
-	defer p.m.Unlock()
-
-	if p.state != playerPlay {
-		return 0
+func (p *Player) readBufferAndAdd(buf []float32) {
+	channelSettings := getChannelSettings(p.channelId)
+	if channelSettings.paused {
+		return
 	}
 
-	n := len(p.buf)
-	if n > len(buf) {
-		n = len(buf)
-	}
+	p.m.Lock()
 
-	prevVolume := float32(p.prevVolume)
-	volume := float32(p.volume)
-
-	src := p.buf[:n]
-
-	for i := 0; i < n; i++ {
-		var v = src[i]
-		if volume == prevVolume {
-			buf[i] += v * volume
-		} else {
-			rate := float32(i) / float32(n)
-			if rate > 1 {
-				rate = 1
+	volumeMultiplier := p.volume * channelSettings.volume
+	finishedPlaying := true
+	for _, playInstance := range p.playInstances {
+		available := len(p.data) - playInstance.pos
+		if p.loop {
+			available = len(buf)
+		}
+		n := min(len(buf), available)
+		loopAdjustment := 0
+		for i := 0; i < n; i++ {
+			di := (playInstance.pos + i + loopAdjustment) % len(p.data)
+			v := p.data[di] * volumeMultiplier
+			fadeInMultiplier := float32(1)
+			fadeOutMultiplier := float32(1)
+			if p.loop && di == playInstance.fadeOutStartsAt {
+				// crossfade: seek to start
+				loopAdjustment += len(p.data) - playInstance.fadeOutStartsAt
+				di = (playInstance.pos + i + loopAdjustment) % len(p.data)
+				v = p.data[di] * volumeMultiplier
+				p.loopedOnce = true
+			} else if di > playInstance.fadeOutStartsAt && playInstance.fadeOutStartsAt < len(p.data) {
+				fadeoutLength := len(p.data) - playInstance.fadeOutStartsAt
+				fadeOutMultiplier = 1 - float32(di-playInstance.fadeOutStartsAt)/float32(fadeoutLength)
 			}
-			buf[i] += v * (volume*rate + prevVolume*(1-rate))
+			if di < playInstance.fadeInEndsAt {
+				fadeInMultiplier = float32(di) / float32(playInstance.fadeInEndsAt)
+				if p.loopedOnce {
+					// crossfade: mix in the "fadeout" value
+					endValue := p.data[di+playInstance.fadeOutStartsAt] * volumeMultiplier
+					buf[i] += v*fadeInMultiplier + (1-fadeInMultiplier)*endValue
+
+					continue
+				}
+			}
+			buf[i] += v * fadeInMultiplier * fadeOutMultiplier
+		}
+		playInstance.pos += n
+		if p.loop {
+			playInstance.pos %= len(p.data)
+		}
+		if playInstance.pos < len(p.data) {
+			finishedPlaying = false
 		}
 	}
-
-	p.prevVolume = p.volume
-
-	copy(p.buf, p.buf[n:])
-	p.buf = p.buf[:len(p.buf)-n]
-
-	if p.eof && len(p.buf) == 0 {
-		p.state = playerPaused
+	if finishedPlaying {
+		p.mux.removePlayer(p)
 	}
 
-	return n
-}
-
-func (p *Player) canReadSourceToBuffer() bool {
-	p.m.Lock()
-	defer p.m.Unlock()
-
-	if p.eof {
-		return false
-	}
-	return len(p.buf) < p.bufferSize
-}
-
-func (p *Player) readSourceToBuffer() int {
-	p.m.Lock()
-	defer p.m.Unlock()
-
-	if p.err != nil {
-		return 0
-	}
-	if p.state == playerClosed {
-		return 0
-	}
-
-	if len(p.buf) >= p.bufferSize {
-		return 0
-	}
-
-	buf, free := p.getTmpBuf()
-	defer free()
-	n, err := p.read(buf)
-
-	if err != nil && err != io.EOF {
-		p.setErrorImpl(err)
-		return 0
-	}
-
-	p.buf = append(p.buf, buf[:n]...)
-	if err == io.EOF {
-		p.eof = true
-		if len(p.buf) == 0 {
-			p.state = playerPaused
-		}
-	}
-	return n
-}
-
-func (p *Player) setErrorImpl(err error) {
-	p.err = err
-	p.closeImpl()
+	p.m.Unlock()
 }
