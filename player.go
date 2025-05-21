@@ -62,6 +62,9 @@ func (p *Sound) Stop() {
 	p.m.Unlock()
 }
 
+// PlayLoop starts playing this sound in an infinite loop.
+// If the sound is already playing, it will not reset it.
+// If it's playing multiple instances right now, this will cause all of them to loop.
 func (p *Sound) PlayLoop(crossFade time.Duration) {
 	if p.loop {
 		return
