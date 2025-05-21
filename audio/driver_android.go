@@ -16,7 +16,7 @@
 package audio
 
 import (
-	"github.com/Lundis/go-gameaudio/internal/oboe"
+	"github.com/Lundis/go-gameaudio/audio/internal/oboe"
 )
 
 type context struct {
