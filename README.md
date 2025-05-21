@@ -8,6 +8,18 @@ An opinionated fork of [Oto](https://github.com/ebitengine/oto).
 I've stripped out io.Reader, instead using only []float32 - no conversions to deal with anywhere. 
 You need to load your sounds into memory.
 
+## Changes compared to Oto:
+- Player was renamed to Sound.
+- One sound can play multiple times simultaneously, without needing to create multiple instances of it.
+- Looping sounds (with crossfade), for simple music or ambient setups
+- Playing sounds with fade in. Randomize the fadein a tiny bit to make SFX sound less repetitive! 
+- Sounds are tied to channels, controlling volume and pausing on the channel level, which is more in line with what you do in a game.
+- Much less memory copying and conversions during playback due to always working on []float32 instead of []byte and io.Reader.
+
+## Future plans:
+- dynamic audio processing (for static processing, just do it on the audio data before creating the Sound)
+
+#### Table of Contents:
 - [go-gameaudio](#go-gameaudio)
   - [Usage](#usage)
   - [Platforms](#platforms)
