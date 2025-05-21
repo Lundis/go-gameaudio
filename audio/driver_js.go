@@ -47,7 +47,7 @@ func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*conte
 
 	d := &context{
 		audioContext: class.New(options),
-		mux:          NewMux(sampleRate, channelCount, format),
+		mux:          NewMux(sampleRate, channelCount),
 	}
 
 	if bufferSizeInBytes == 0 {
