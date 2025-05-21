@@ -13,23 +13,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package oto_test
+package audio_test
 
 import (
+	"github.com/Lundis/go-gameaudio/audio"
 	"os"
 	"testing"
 	"time"
-
-	"github.com/Lundis/oto/v3"
 )
 
-var theContext *oto.Context
+var theContext *audio.Context
 
 func TestMain(m *testing.M) {
-	op := &oto.NewContextOptions{}
+	op := &audio.NewContextOptions{}
 	op.SampleRate = 48000
 	op.ChannelCount = 2
-	ctx, ready, err := oto.NewContext(op)
+	ctx, ready, err := audio.NewContext(op)
 	if err != nil {
 		panic(err)
 	}
@@ -39,7 +38,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestEmptyPlayer(t *testing.T) {
-	p := theContext.NewSound(make([]float32, 0), 1, oto.ChannelIdDefault)
+	p := theContext.NewSound(make([]float32, 0), 1, audio.ChannelIdDefault)
 	p.Play()
 	for p.IsPlaying() {
 		time.Sleep(time.Millisecond)

@@ -16,28 +16,27 @@
 package main
 
 import (
-	"github.com/Lundis/oto/v3/example/internal"
+	"github.com/Lundis/go-gameaudio/audio"
+	"github.com/Lundis/go-gameaudio/examples/internal"
 	"runtime"
 	"sync"
 	"time"
-
-	"github.com/Lundis/oto/v3"
 )
 
 func main() {
-	op := &oto.NewContextOptions{}
+	op := &audio.NewContextOptions{}
 	op.SampleRate = internal.SampleRate
 	op.ChannelCount = internal.ChannelCount
 	op.BufferSize = 10 * time.Millisecond // this is actually ignored in windows (WASAPI)
 
-	c, ready, err := oto.NewContext(op)
+	c, ready, err := audio.NewContext(op)
 	if err != nil {
 		panic(err)
 	}
 	<-ready
 
 	var wg sync.WaitGroup
-	var players []*oto.Sound
+	var sounds []*audio.Sound
 	var m sync.Mutex
 
 	wg.Add(1)
@@ -45,7 +44,7 @@ func main() {
 		defer wg.Done()
 		p := internal.PlaySineWave(c, internal.FreqC, 3*time.Second)
 		m.Lock()
-		players = append(players, p)
+		sounds = append(sounds, p)
 		m.Unlock()
 		time.Sleep(3 * time.Second)
 	}()
@@ -55,7 +54,7 @@ func main() {
 		time.Sleep(1 * time.Second)
 		p := internal.PlaySineWave(c, internal.FreqE, 3*time.Second)
 		m.Lock()
-		players = append(players, p)
+		sounds = append(sounds, p)
 		m.Unlock()
 		time.Sleep(3 * time.Second)
 	}()
@@ -66,14 +65,14 @@ func main() {
 		time.Sleep(2 * time.Second)
 		p := internal.PlaySineWave(c, internal.FreqG, 3*time.Second)
 		m.Lock()
-		players = append(players, p)
+		sounds = append(sounds, p)
 		m.Unlock()
 		time.Sleep(3 * time.Second)
 	}()
 
 	wg.Wait()
 
-	// Pin the players not to GC the players.
-	runtime.KeepAlive(players)
+	// Pin the sounds not to GC the sounds.
+	runtime.KeepAlive(sounds)
 
 }

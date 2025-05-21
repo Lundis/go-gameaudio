@@ -1,22 +1,86 @@
-# Oto (v3)
+# go-gameaudio
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/ebitengine/oto/v3.svg)](https://pkg.go.dev/github.com/ebitengine/oto/v3)
-[![Build Status](https://github.com/ebitengine/oto/actions/workflows/test.yml/badge.svg)](https://github.com/ebitengine/oto/actions?query=workflow%3Atest)
+[![Go Reference](https://pkg.go.dev/badge/github.com/Lundis/go-gameaudio.svg)](https://pkg.go.dev/github.com/Lundis/go-gameaudio)
+[![Build Status](https://github.com/Lundis/go-gameaudio/actions/workflows/test.yml/badge.svg)](https://github.com/Lundis/go-gameaudio/actions?query=workflow%3Atest)
 
 An opinionated fork of [Oto](https://github.com/ebitengine/oto). 
 
 I've stripped out io.Reader, instead using only []float32 - no conversions to deal with anywhere. 
 You need to load your sounds into memory.
 
-- [Oto (v3)](#oto-v3)
+- [go-gameaudio](#go-gameaudio)
+  - [Usage](#usage)
   - [Platforms](#platforms)
   - [Prerequisite](#prerequisite)
     - [macOS](#macos)
     - [iOS](#ios)
     - [Linux](#linux)
     - [FreeBSD, OpenBSD](#freebsd-openbsd)
-  - [Usage](#usage)
   - [Crosscompiling](#crosscompiling)
+
+
+## Usage
+
+The two main components are a `Context` and `Sound`. The context handles interactions with
+the OS and audio drivers, and as such there can only be **one** context in your program.
+
+From a context you can create any number of different players, where each player is given an `io.Reader` that
+it reads bytes representing sounds from and plays.
+
+```go
+package main
+
+import (
+    "time"
+
+    "github.com/Lundis/go-gameaudio/audio"
+    "github.com/Lundis/go-gameaudio/loaders/wav"
+)
+
+const sampleRate = 44100
+
+func main() {
+	// audio files must have the expected sample rate, this library does not resample
+    audioData, err := wav.LoadWav("loaders/wav/test_stereo.wav", sampleRate)
+    if err != nil {
+        panic(err)
+    }
+
+    // Prepare a context (this will use your default audio device) that will
+    // play all our sounds. Its configuration can't be changed later.
+
+    op := &audio.NewContextOptions{
+        // Usually 44100 or 48000. Other values might cause distortions
+		SampleRate: sampleRate,
+        // Number of channels (aka locations) to play sounds from. Either 1 or 2.
+        // 1 is mono sound, and 2 is stereo (most speakers are stereo). 
+        ChannelCount: 2,
+	    // audio device buffer size in time. audio devices may ignore this.
+	    BufferSize: 10 * time.Millisecond,
+    }
+
+    // Remember that you should **not** create more than one context
+    context, readyChan, err := audio.NewContext(op)
+    if err != nil {
+        panic("oto.NewContext failed: " + err.Error())
+    }
+    // It might take a bit for the hardware audio devices to be ready, so we wait on the channel.
+    <-readyChan
+
+    // Create a new 'player' that will handle our sound. Paused by default.
+    player := context.NewSound(audioData, 1, audio.ChannelIdDefault)
+    
+    // Play starts playing the sound and returns without waiting for it (Play() is async).
+    player.Play()
+
+    // We can wait for the sound to finish playing using something like this
+    for player.IsPlaying() {
+        time.Sleep(time.Millisecond)
+    }
+}
+```
+
+See the examples folder for more examples.
 
 ## Platforms
 
@@ -41,11 +105,11 @@ On some platforms you will need a C/C++ compiler in your path that Go can use.
 
 ### macOS
 
-Oto requires `AudioToolbox.framework`, but this is automatically linked.
+This requires `AudioToolbox.framework`, but this is automatically linked.
 
 ### iOS
 
-Oto requires these frameworks:
+This requires these frameworks:
 
 - `AVFoundation.framework`
 - `AudioToolbox.framework`
@@ -70,70 +134,7 @@ In most cases this command must be run by root user or through `sudo` command.
 
 ### FreeBSD, OpenBSD
 
-BSD systems are not tested well. If ALSA works, Oto should work.
-
-## Usage
-
-The two main components of Oto are a `Context` and `Sound`. The context handles interactions with
-the OS and audio drivers, and as such there can only be **one** context in your program.
-
-From a context you can create any number of different players, where each player is given an `io.Reader` that
-it reads bytes representing sounds from and plays.
-
-```go
-package main
-
-import (
-    "time"
-
-    "github.com/Lundis/oto/v3"
-    "github.com/Lundis/oto/v3/loaders/wav"
-)
-
-const sampleRate = 44100
-
-func main() {
-	// audio files must have the expected sample rate, this library does not resample
-    audioData, err := wav.LoadWav("loaders/wav/test_stereo.wav", sampleRate)
-    if err != nil {
-        panic(err)
-    }
-
-    // Prepare an Oto context (this will use your default audio device) that will
-    // play all our sounds. Its configuration can't be changed later.
-
-    op := &oto.NewContextOptions{
-        // Usually 44100 or 48000. Other values might cause distortions in Oto
-		SampleRate: sampleRate,
-        // Number of channels (aka locations) to play sounds from. Either 1 or 2.
-        // 1 is mono sound, and 2 is stereo (most speakers are stereo). 
-        ChannelCount: 2,
-	    // audio device buffer size in time. audio devices may ignore this.
-	    BufferSize: 10 * time.Millisecond,
-    }
-
-    // Remember that you should **not** create more than one context
-    otoCtx, readyChan, err := oto.NewContext(op)
-    if err != nil {
-        panic("oto.NewContext failed: " + err.Error())
-    }
-    // It might take a bit for the hardware audio devices to be ready, so we wait on the channel.
-    <-readyChan
-
-    // Create a new 'player' that will handle our sound. Paused by default.
-    player := otoCtx.NewSound(audioData, 1, oto.ChannelIdDefault)
-    
-    // Play starts playing the sound and returns without waiting for it (Play() is async).
-    player.Play()
-
-    // We can wait for the sound to finish playing using something like this
-    for player.IsPlaying() {
-        time.Sleep(time.Millisecond)
-    }
-}
-```
-
-See the examples folder for more examples.
+BSD systems are not tested well. If ALSA works, this should work.
 
 ## Crosscompiling
 

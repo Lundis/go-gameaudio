@@ -1,20 +1,19 @@
 package main
 
 import (
-	"github.com/Lundis/oto/v3/example/internal"
-	"github.com/Lundis/oto/v3/loaders/wav"
+	"github.com/Lundis/go-gameaudio/audio"
+	"github.com/Lundis/go-gameaudio/examples/internal"
+	"github.com/Lundis/go-gameaudio/loaders/wav"
 	"time"
-
-	"github.com/Lundis/oto/v3"
 )
 
 func main() {
-	op := &oto.NewContextOptions{}
+	op := &audio.NewContextOptions{}
 	op.SampleRate = internal.SampleRate
 	op.ChannelCount = internal.ChannelCount
 	op.BufferSize = 10 * time.Millisecond // this is actually ignored in windows (WASAPI)
 
-	context, ready, err := oto.NewContext(op)
+	context, ready, err := audio.NewContext(op)
 	if err != nil {
 		panic(err)
 	}
@@ -24,7 +23,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	p := context.NewSound(data, 1, oto.ChannelIdDefault)
+	p := context.NewSound(data, 1, audio.ChannelIdDefault)
 	// this crossfading sounds rather silly...
 	p.PlayLoop(1000 * time.Millisecond)
 

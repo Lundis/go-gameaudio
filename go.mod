@@ -1,4 +1,4 @@
-module github.com/Lundis/oto/v3
+module github.com/Lundis/go-gameaudio
 
 go 1.23.0
 

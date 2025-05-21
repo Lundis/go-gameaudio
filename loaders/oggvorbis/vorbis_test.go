@@ -1,7 +1,7 @@
 package vorbis_test
 
 import (
-	vorbis "github.com/Lundis/oto/v3/loaders/oggvorbis"
+	vorbis "github.com/Lundis/go-gameaudio/loaders/oggvorbis"
 	"testing"
 )
 

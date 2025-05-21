@@ -1,4 +1,4 @@
-package oto
+package audio
 
 import "sync"
 
@@ -9,8 +9,9 @@ const (
 	ChannelIdMusic    ChannelId = iota
 	ChannelIdAmbience ChannelId = iota
 	ChannelIdSfx      ChannelId = iota
+	ChannelIdUi       ChannelId = iota
 	ChannelIdDialog   ChannelId = iota
-	// ChannelIdLast is for when you want to add additional channels yourself
+	// ChannelIdLast is for when you want to define additional channels yourself
 	ChannelIdLast ChannelId = iota
 )
 

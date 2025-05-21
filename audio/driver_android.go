@@ -13,10 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package oto
+package audio
 
 import (
-	"github.com/Lundis/oto/v3/internal/oboe"
+	"github.com/Lundis/go-gameaudio/internal/oboe"
 )
 
 type context struct {

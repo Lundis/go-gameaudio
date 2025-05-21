@@ -15,7 +15,7 @@
 
 //go:build nintendosdk || playstation5
 
-package oto
+package audio
 
 // #cgo !darwin LDFLAGS: -Wl,-unresolved-symbols=ignore-all
 // #cgo darwin LDFLAGS: -Wl,-undefined,dynamic_lookup

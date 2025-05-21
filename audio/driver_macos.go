@@ -15,7 +15,7 @@
 
 //go:build darwin && !ios
 
-package oto
+package audio
 
 import (
 	"unsafe"

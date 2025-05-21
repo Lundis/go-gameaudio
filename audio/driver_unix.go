@@ -15,7 +15,7 @@
 
 //go:build !android && !darwin && !js && !windows && !nintendosdk && !playstation5
 
-package oto
+package audio
 
 // #cgo pkg-config: alsa
 //

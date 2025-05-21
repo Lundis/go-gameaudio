@@ -1,7 +1,7 @@
 package wav_test
 
 import (
-	"github.com/Lundis/oto/v3/loaders/wav"
+	"github.com/Lundis/go-gameaudio/loaders/wav"
 	"testing"
 )
 

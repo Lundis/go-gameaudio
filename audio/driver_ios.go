@@ -14,7 +14,7 @@
 
 //go:build darwin && ios
 
-package oto
+package audio
 
 func setNotificationHandler() error {
 	// AVAudioSessionInterruptionNotification is not reliable on iOS. Rely on
