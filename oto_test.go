@@ -39,23 +39,9 @@ func TestMain(m *testing.M) {
 }
 
 func TestEmptyPlayer(t *testing.T) {
-	bs := oto.NewMemoryReader(make([]float32, 0))
-	p := theContext.NewPlayer(bs)
+	p := theContext.NewSound(make([]float32, 0), 1, oto.ChannelIdDefault)
 	p.Play()
 	for p.IsPlaying() {
 		time.Sleep(time.Millisecond)
-	}
-}
-
-// Issue #258
-func TestSetBufferSize(t *testing.T) {
-	for i := 0; i < 10; i++ {
-		bs := oto.NewMemoryReader(make([]float32, 128))
-		p := theContext.NewPlayer(bs)
-		p.Play()
-		p.SetBufferSize(64)
-		for p.IsPlaying() {
-			time.Sleep(time.Millisecond)
-		}
 	}
 }

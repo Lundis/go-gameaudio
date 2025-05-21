@@ -24,7 +24,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	p := context.NewPlayer(data, 1, oto.ChannelIdDefault)
+	p := context.NewSound(data, 1, oto.ChannelIdDefault)
 	p.Play()
 	time.Sleep(300 * time.Millisecond)
 	p.Play()

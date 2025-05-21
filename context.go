@@ -29,7 +29,7 @@ var (
 // Context is the main object in Oto. It interacts with the audio drivers.
 //
 // To play sound with Oto, first create a context. Then use the context to create
-// an arbitrary number of players. Then use the players to play sound.
+// an arbitrary number of sounds. Then use the sounds to play sound.
 //
 // Creating multiple contexts is NOT supported.
 type Context struct {
@@ -57,7 +57,7 @@ type NewContextOptions struct {
 }
 
 // NewContext creates a new context with given options.
-// A context creates and holds ready-to-use Player objects.
+// A context creates and holds ready-to-use Sound objects.
 // NewContext returns a context, a channel that is closed when the context is ready, and an error if it exists.
 //
 // Creating multiple contexts is NOT supported.
@@ -85,37 +85,17 @@ func NewContext(options *NewContextOptions) (*Context, chan struct{}, error) {
 	return &Context{context: ctx}, ready, nil
 }
 
-// NewPlayer creates a new, ready-to-use Player belonging to the Context.
-// It is safe to create multiple players.
-//
-// The format of r is as follows:
+// NewSound creates a new, ready-to-use Sound belonging to the Context.
+// It is safe to create multiple sounds.
 //
 //	[data]      = [sample 1] [sample 2] [sample 3] ...
 //	[sample *]  = [channel 1] [channel 2] ...
-//	[channel *] = [byte 1] [byte 2] ...
+//	[channel *] = [float32]
 //
-// Byte ordering is little endian.
+// NewSound is concurrent-safe.
 //
-// A player has some amount of an underlying buffer.
-// Read data from r is queued to the player's underlying buffer.
-// The underlying buffer is consumed by its playing.
-// Then, r's position and the current playing position don't necessarily match.
-// If you want to clear the underlying buffer for some reasons e.g., you want to seek the position of r,
-// call the player's Reset function.
-//
-// You cannot share r by multiple players.
-//
-// The returned player implements Player, BufferSizeSetter, and io.Seeker.
-// You can modify the buffer size of a player by the SetBufferSize function.
-// A small buffer size is useful if you want to play a real-time PCM for example.
-// Note that the audio quality might be affected if you modify the buffer size.
-//
-// If r does not implement io.Seeker, the returned player's Seek returns an error.
-//
-// NewPlayer is concurrent-safe.
-//
-// All the functions of a Player returned by NewPlayer are concurrent-safe.
-func (c *Context) NewPlayer(data []float32, volume float32, channel ChannelId) *Player {
+// All the functions of a Sound returned by NewSound are concurrent-safe.
+func (c *Context) NewSound(data []float32, volume float32, channel ChannelId) *Sound {
 	return c.context.mux.NewPlayer(data, volume, channel)
 }
 

@@ -119,7 +119,7 @@ func newWASAPIContext(sampleRate, channelCount int, mux *Mux, bufferSizeInBytes 
 	}
 	defer func() {
 		if ferr != nil {
-			windows.CloseHandle(ev)
+			_ = windows.CloseHandle(ev)
 		}
 	}()
 	c.sampleReadyEvent = ev
@@ -396,7 +396,7 @@ func (c *wasapiContext) writeOnRenderThread() error {
 		c.buf = c.buf[:buflen]
 	}
 
-	// Read the buffer from the players.
+	// Read the buffer from the sounds.
 	c.mux.ReadFloat32s(c.buf)
 
 	// Copy the read buf to the destination buffer.

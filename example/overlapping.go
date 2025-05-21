@@ -37,7 +37,7 @@ func main() {
 	<-ready
 
 	var wg sync.WaitGroup
-	var players []*oto.Player
+	var players []*oto.Sound
 	var m sync.Mutex
 
 	wg.Add(1)

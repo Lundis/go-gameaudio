@@ -20,26 +20,26 @@ import (
 	"time"
 )
 
-type playInstance struct {
+type player struct {
 	pos             int
 	fadeInEndsAt    int
 	fadeOutStartsAt int
 }
 
-type Player struct {
-	mux           *Mux
-	data          []float32
-	playInstances []*playInstance
-	channelId     ChannelId
-	volume        float32
-	m             sync.Mutex
-	throttlingMs  int
-	loop          bool
-	loopedOnce    bool
+type Sound struct {
+	mux          *Mux
+	data         []float32
+	players      []*player
+	channelId    ChannelId
+	volume       float32
+	m            sync.Mutex
+	throttlingMs int
+	loop         bool
+	loopedOnce   bool
 }
 
-func (m *Mux) NewPlayer(data []float32, volume float32, channel ChannelId) *Player {
-	pl := &Player{
+func (m *Mux) NewPlayer(data []float32, volume float32, channel ChannelId) *Sound {
+	pl := &Sound{
 		mux:          m,
 		data:         data,
 		volume:       volume,
@@ -49,20 +49,20 @@ func (m *Mux) NewPlayer(data []float32, volume float32, channel ChannelId) *Play
 	return pl
 }
 
-func (p *Player) Play() {
+func (p *Sound) Play() {
 	p.m.Lock()
 	p.playImpl(0, len(p.data))
 	p.m.Unlock()
 }
 
-func (p *Player) Stop() {
+func (p *Sound) Stop() {
 	p.m.Lock()
 	p.loop = false
-	p.playInstances = p.playInstances[:0]
+	p.players = p.players[:0]
 	p.m.Unlock()
 }
 
-func (p *Player) PlayLoop(crossFade time.Duration) {
+func (p *Sound) PlayLoop(crossFade time.Duration) {
 	if p.loop {
 		return
 	}
@@ -73,22 +73,22 @@ func (p *Player) PlayLoop(crossFade time.Duration) {
 	p.m.Unlock()
 }
 
-func (p *Player) PlayFadeIn(fadeIn time.Duration) {
+func (p *Sound) PlayFadeIn(fadeIn time.Duration) {
 	p.m.Lock()
 	p.playImpl(int(float64(p.mux.channelCount*p.mux.sampleRate)*fadeIn.Seconds()), len(p.data))
 	p.m.Unlock()
 }
 
-func (p *Player) SetThrottlingMs(ms int) {
+func (p *Sound) SetThrottlingMs(ms int) {
 	p.m.Lock()
 	p.throttlingMs = ms
 	p.m.Unlock()
 }
 
-func (p *Player) playImpl(fadeInEndsAt int, fadeOutStartsAt int) {
+func (p *Sound) playImpl(fadeInEndsAt int, fadeOutStartsAt int) {
 	// re-use an existing play slot if possible
-	var freeInstance *playInstance
-	for _, pi := range p.playInstances {
+	var freeInstance *player
+	for _, pi := range p.players {
 		if pi.pos < p.mux.sampleRate*p.mux.channelCount*p.throttlingMs/1000 && !p.loop {
 			// don't start playing again until throttlingMs has passed
 			return
@@ -99,8 +99,8 @@ func (p *Player) playImpl(fadeInEndsAt int, fadeOutStartsAt int) {
 		}
 	}
 	if freeInstance == nil {
-		freeInstance = &playInstance{}
-		p.playInstances = append(p.playInstances, freeInstance)
+		freeInstance = &player{}
+		p.players = append(p.players, freeInstance)
 	}
 	// when looping, don't reset the currently playing instance
 	if !p.loop {
@@ -109,20 +109,20 @@ func (p *Player) playImpl(fadeInEndsAt int, fadeOutStartsAt int) {
 	freeInstance.fadeInEndsAt = fadeInEndsAt
 	freeInstance.fadeOutStartsAt = fadeOutStartsAt
 
-	p.mux.addPlayer(p)
+	p.mux.addSound(p)
 }
 
-func (p *Player) Reset() {
+func (p *Sound) Reset() {
 	p.m.Lock()
-	p.playInstances = p.playInstances[:0]
+	p.players = p.players[:0]
 	p.m.Unlock()
 }
 
-func (p *Player) IsPlaying() bool {
+func (p *Sound) IsPlaying() bool {
 	p.m.Lock()
 	defer p.m.Unlock()
 
-	for _, i := range p.playInstances {
+	for _, i := range p.players {
 		if i.pos < len(p.data) {
 			return true
 		}
@@ -130,7 +130,7 @@ func (p *Player) IsPlaying() bool {
 	return false
 }
 
-func (p *Player) readBufferAndAdd(buf []float32) {
+func (p *Sound) readBufferAndAdd(buf []float32) {
 	channelSettings := getChannelSettings(p.channelId)
 	if channelSettings.paused {
 		return
@@ -140,7 +140,7 @@ func (p *Player) readBufferAndAdd(buf []float32) {
 
 	volumeMultiplier := p.volume * channelSettings.volume
 	finishedPlaying := true
-	for _, playInstance := range p.playInstances {
+	for _, playInstance := range p.players {
 		available := len(p.data) - playInstance.pos
 		if p.loop {
 			available = len(buf)
@@ -183,7 +183,7 @@ func (p *Player) readBufferAndAdd(buf []float32) {
 		}
 	}
 	if finishedPlaying {
-		p.mux.removePlayer(p)
+		p.mux.removeSound(p)
 	}
 
 	p.m.Unlock()

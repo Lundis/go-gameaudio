@@ -24,7 +24,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	p := context.NewPlayer(data, 1, oto.ChannelIdDefault)
+	p := context.NewSound(data, 1, oto.ChannelIdDefault)
 	// this crossfading sounds rather silly...
 	p.PlayLoop(1000 * time.Millisecond)
 

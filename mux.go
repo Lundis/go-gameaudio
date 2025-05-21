@@ -13,21 +13,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package mux offers APIs for a low-level multiplexer of audio players.
-// Usually you don't have to use this package directly.
 package oto
 
 import (
 	"sync"
 )
 
-// Mux is a low-level multiplexer of audio players.
+// Mux is a low-level multiplexer of audio sounds.
 type Mux struct {
 	sampleRate   int
 	channelCount int
 
-	players map[*Player]struct{}
-	cond    *sync.Cond
+	sounds map[*Sound]struct{}
+	cond   *sync.Cond
 }
 
 // NewMux creates a new Mux.
@@ -40,46 +38,37 @@ func NewMux(sampleRate int, channelCount int) *Mux {
 	return m
 }
 
-func (m *Mux) addPlayer(player *Player) {
+func (m *Mux) addSound(sound *Sound) {
 	m.cond.L.Lock()
 	defer m.cond.L.Unlock()
 
-	if m.players == nil {
-		m.players = map[*Player]struct{}{}
+	if m.sounds == nil {
+		m.sounds = map[*Sound]struct{}{}
 	}
-	m.players[player] = struct{}{}
+	m.sounds[sound] = struct{}{}
 	m.cond.Signal()
 }
 
-func (m *Mux) removePlayer(player *Player) {
+func (m *Mux) removeSound(sound *Sound) {
 	m.cond.L.Lock()
 	defer m.cond.L.Unlock()
 
-	delete(m.players, player)
+	delete(m.sounds, sound)
 	m.cond.Signal()
 }
 
-// ReadFloat32s fills buf with the multiplexed data of the players as float32 values.
+// ReadFloat32s fills buf with the multiplexed data of the sounds as float32 values.
 func (m *Mux) ReadFloat32s(buf []float32) {
 	m.cond.L.Lock()
-	players := make([]*Player, 0, len(m.players))
-	for p := range m.players {
-		players = append(players, p)
+	sounds := make([]*Sound, 0, len(m.sounds))
+	for p := range m.sounds {
+		sounds = append(sounds, p)
 	}
 	m.cond.L.Unlock()
 
 	clear(buf)
-	for _, p := range players {
+	for _, p := range sounds {
 		p.readBufferAndAdd(buf)
 	}
 	m.cond.Signal()
-}
-
-// TODO: The term 'buffer' is confusing. Name each buffer with good terms.
-
-// defaultBufferSize returns the default size of the buffer for the audio source.
-// This buffer is used when unreading on pausing the player.
-func (m *Mux) defaultBufferSize() int {
-	s := m.sampleRate * m.channelCount / 20 // 50ms
-	return s
 }
