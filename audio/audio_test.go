@@ -22,23 +22,20 @@ import (
 	"time"
 )
 
-var theContext *audio.Context
-
 func TestMain(m *testing.M) {
 	op := &audio.NewContextOptions{}
 	op.SampleRate = 48000
 	op.ChannelCount = 2
-	ctx, ready, err := audio.NewContext(op)
+	ready, err := audio.InitContext(op)
 	if err != nil {
 		panic(err)
 	}
 	<-ready
-	theContext = ctx
 	os.Exit(m.Run())
 }
 
 func TestEmptyPlayer(t *testing.T) {
-	p := theContext.NewSound(make([]float32, 0), 1, audio.ChannelIdDefault)
+	p := audio.NewSound(make([]float32, 0), 1, audio.ChannelIdDefault)
 	p.Play()
 	for p.IsPlaying() {
 		time.Sleep(time.Millisecond)

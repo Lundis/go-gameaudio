@@ -22,9 +22,11 @@ import (
 )
 
 var (
-	contextCreated       bool
+	currentContext       *Context
 	contextCreationMutex sync.Mutex
 )
+
+var ErrContextNotCreated error = fmt.Errorf("context not created")
 
 // Context is the main object in Oto. It interacts with the audio drivers.
 //
@@ -61,14 +63,13 @@ type NewContextOptions struct {
 // NewContext returns a context, a channel that is closed when the context is ready, and an error if it exists.
 //
 // Creating multiple contexts is NOT supported.
-func NewContext(options *NewContextOptions) (*Context, chan struct{}, error) {
+func InitContext(options *NewContextOptions) (chan struct{}, error) {
 	contextCreationMutex.Lock()
 	defer contextCreationMutex.Unlock()
 
-	if contextCreated {
-		return nil, nil, fmt.Errorf("oto: context is already created")
+	if currentContext != nil {
+		return nil, fmt.Errorf("context was already created")
 	}
-	contextCreated = true
 
 	var bufferSizeInBytes int
 	if options.BufferSize != 0 {
@@ -80,42 +81,38 @@ func NewContext(options *NewContextOptions) (*Context, chan struct{}, error) {
 	}
 	ctx, ready, err := newContext(options.SampleRate, options.ChannelCount, bufferSizeInBytes)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return &Context{context: ctx}, ready, nil
-}
-
-// NewSound creates a new, ready-to-use Sound belonging to the Context.
-// It is safe to create multiple sounds.
-//
-//	[data]      = [sample 1] [sample 2] [sample 3] ...
-//	[sample *]  = [channel 1] [channel 2] ...
-//	[channel *] = [float32]
-//
-// NewSound is concurrent-safe.
-//
-// All the functions of a Sound returned by NewSound are concurrent-safe.
-func (c *Context) NewSound(data []float32, volume float32, channel ChannelId) *Sound {
-	return c.context.mux.NewPlayer(data, volume, channel)
+	currentContext = &Context{context: ctx}
+	return ready, nil
 }
 
 // Suspend suspends the entire audio play.
 //
 // Suspend is concurrent-safe.
-func (c *Context) Suspend() error {
-	return c.context.Suspend()
+func Suspend() error {
+	if currentContext == nil {
+		return ErrContextNotCreated
+	}
+	return currentContext.context.Suspend()
 }
 
 // Resume resumes the entire audio play, which was suspended by Suspend.
 //
 // Resume is concurrent-safe.
-func (c *Context) Resume() error {
-	return c.context.Resume()
+func Resume() error {
+	if currentContext == nil {
+		return ErrContextNotCreated
+	}
+	return currentContext.context.Resume()
 }
 
 // Err returns the current error.
 //
 // Err is concurrent-safe.
-func (c *Context) Err() error {
-	return c.context.Err()
+func Err() error {
+	if currentContext == nil {
+		return ErrContextNotCreated
+	}
+	return currentContext.context.Err()
 }

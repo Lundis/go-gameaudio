@@ -29,7 +29,7 @@ func main() {
 	op.ChannelCount = internal.ChannelCount
 	op.BufferSize = 10 * time.Millisecond // this is actually ignored in windows (WASAPI)
 
-	c, ready, err := audio.NewContext(op)
+	ready, err := audio.InitContext(op)
 	if err != nil {
 		panic(err)
 	}
@@ -42,7 +42,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		p := internal.PlaySineWave(c, internal.FreqC, 3*time.Second)
+		p := internal.PlaySineWave(internal.FreqC, 3*time.Second)
 		m.Lock()
 		sounds = append(sounds, p)
 		m.Unlock()
@@ -52,7 +52,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		time.Sleep(1 * time.Second)
-		p := internal.PlaySineWave(c, internal.FreqE, 3*time.Second)
+		p := internal.PlaySineWave(internal.FreqE, 3*time.Second)
 		m.Lock()
 		sounds = append(sounds, p)
 		m.Unlock()
@@ -63,7 +63,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		time.Sleep(2 * time.Second)
-		p := internal.PlaySineWave(c, internal.FreqG, 3*time.Second)
+		p := internal.PlaySineWave(internal.FreqG, 3*time.Second)
 		m.Lock()
 		sounds = append(sounds, p)
 		m.Unlock()

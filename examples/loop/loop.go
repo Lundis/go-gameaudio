@@ -13,7 +13,7 @@ func main() {
 	op.ChannelCount = internal.ChannelCount
 	op.BufferSize = 10 * time.Millisecond // this is actually ignored in windows (WASAPI)
 
-	context, ready, err := audio.NewContext(op)
+	ready, err := audio.InitContext(op)
 	if err != nil {
 		panic(err)
 	}
@@ -23,7 +23,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	p := context.NewSound(data, 1, audio.ChannelIdDefault)
+	p := audio.NewSound(data, 1, audio.ChannelIdDefault)
 	// this crossfading sounds rather silly...
 	p.PlayLoop(1000 * time.Millisecond)
 

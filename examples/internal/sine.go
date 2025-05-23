@@ -19,8 +19,8 @@ func GenerateSineWave(freq float64, duration time.Duration) []float32 {
 
 }
 
-func PlaySineWave(context *audio.Context, freq float64, duration time.Duration) *audio.Sound {
-	p := context.NewSound(GenerateSineWave(freq, duration), 1, audio.ChannelIdDefault)
+func PlaySineWave(freq float64, duration time.Duration) *audio.Sound {
+	p := audio.NewSound(GenerateSineWave(freq, duration), 1, audio.ChannelIdDefault)
 	p.Play()
 	return p
 }

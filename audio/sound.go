@@ -20,10 +20,32 @@ import (
 	"time"
 )
 
-type player struct {
-	pos             int
-	fadeInEndsAt    int
-	fadeOutStartsAt int
+// NewSound creates a new, ready-to-use Sound belonging to the Context.
+// It is safe to create multiple sounds.
+//
+//	[data]      = [sample 1] [sample 2] [sample 3] ...
+//	[sample *]  = [channel 1] [channel 2] ...
+//	[channel *] = [float32]
+//
+// NewSound is concurrent-safe.
+//
+// All the functions of a Sound returned by NewSound are concurrent-safe.
+func NewSound(data []float32, volume float32, channel ChannelId) *Sound {
+	if currentContext == nil {
+		return nil
+	}
+	return currentContext.context.mux.NewPlayer(data, volume, channel)
+}
+
+func (m *Mux) NewPlayer(data []float32, volume float32, channel ChannelId) *Sound {
+	pl := &Sound{
+		mux:          m,
+		data:         data,
+		volume:       volume,
+		channelId:    channel,
+		throttlingMs: 50,
+	}
+	return pl
 }
 
 type Sound struct {
@@ -38,15 +60,10 @@ type Sound struct {
 	loopedOnce   bool
 }
 
-func (m *Mux) NewPlayer(data []float32, volume float32, channel ChannelId) *Sound {
-	pl := &Sound{
-		mux:          m,
-		data:         data,
-		volume:       volume,
-		channelId:    channel,
-		throttlingMs: 50,
-	}
-	return pl
+type player struct {
+	pos             int
+	fadeInEndsAt    int
+	fadeOutStartsAt int
 }
 
 func (p *Sound) Play() {
