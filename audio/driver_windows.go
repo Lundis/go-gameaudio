@@ -23,12 +23,7 @@ import (
 
 var errDeviceNotFound = errors.New("oto: device not found")
 
-type context struct {
-	sampleRate   int
-	channelCount int
-
-	mux *Mux
-
+var windowsContext struct {
 	wasapiContext *wasapiContext
 	winmmContext  *winmmContext
 	nullContext   *nullContext
@@ -37,105 +32,49 @@ type context struct {
 	err   atomicError
 }
 
-func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*context, chan struct{}, error) {
-	ctx := &context{
-		sampleRate:   sampleRate,
-		channelCount: channelCount,
-		mux:          NewMux(sampleRate, channelCount),
-		ready:        make(chan struct{}),
-	}
+func newContext(bufferSizeInBytes int) (chan struct{}, error) {
+	windowsContext.ready = make(chan struct{})
 
 	// Initializing drivers might take some time. Do this asynchronously.
 	go func() {
-		defer close(ctx.ready)
+		defer close(windowsContext.ready)
 
-		xc, err0 := newWASAPIContext(sampleRate, channelCount, ctx.mux, bufferSizeInBytes)
+		xc, err0 := newWASAPIContext(bufferSizeInBytes)
 		if err0 == nil {
-			ctx.wasapiContext = xc
+			windowsContext.wasapiContext = xc
 			return
 		}
 
-		wc, err1 := newWinMMContext(sampleRate, channelCount, ctx.mux, bufferSizeInBytes)
+		wc, err1 := newWinMMContext(bufferSizeInBytes)
 		if err1 == nil {
-			ctx.winmmContext = wc
+			windowsContext.winmmContext = wc
 			return
 		}
 
 		if errors.Is(err0, errDeviceNotFound) && errors.Is(err1, errDeviceNotFound) {
-			ctx.nullContext = newNullContext(sampleRate, channelCount, ctx.mux)
+			windowsContext.nullContext = newNullContext()
 			return
 		}
 
-		ctx.err.TryStore(fmt.Errorf("oto: initialization failed: WASAPI: %v, WinMM: %v", err0, err1))
+		windowsContext.err.TryStore(fmt.Errorf("oto: initialization failed: WASAPI: %v, WinMM: %v", err0, err1))
 	}()
 
-	return ctx, ctx.ready, nil
-}
-
-func (c *context) Suspend() error {
-	<-c.ready
-	if c.wasapiContext != nil {
-		return c.wasapiContext.Suspend()
-	}
-	if c.winmmContext != nil {
-		return c.winmmContext.Suspend()
-	}
-	if c.nullContext != nil {
-		return c.nullContext.Suspend()
-	}
-	return nil
-}
-
-func (c *context) Resume() error {
-	<-c.ready
-	if c.wasapiContext != nil {
-		return c.wasapiContext.Resume()
-	}
-	if c.winmmContext != nil {
-		return c.winmmContext.Resume()
-	}
-	if c.nullContext != nil {
-		return c.nullContext.Resume()
-	}
-	return nil
-}
-
-func (c *context) Err() error {
-	if err := c.err.Load(); err != nil {
-		return err
-	}
-
-	select {
-	case <-c.ready:
-	default:
-		return nil
-	}
-
-	if c.wasapiContext != nil {
-		return c.wasapiContext.Err()
-	}
-	if c.winmmContext != nil {
-		return c.winmmContext.Err()
-	}
-	if c.nullContext != nil {
-		return c.nullContext.Err()
-	}
-	return nil
+	return windowsContext.ready, nil
 }
 
 type nullContext struct {
 	suspended bool
 }
 
-func newNullContext(sampleRate int, channelCount int, mux *Mux) *nullContext {
+func newNullContext() *nullContext {
 	c := &nullContext{}
-	go c.loop(sampleRate, channelCount, mux)
+	go c.loop()
 	return c
 }
 
-func (c *nullContext) loop(sampleRate int, channelCount int, mux *Mux) {
+func (c *nullContext) loop() {
 	var buf32 [4096]float32
-	sleep := time.Duration(float64(time.Second) * float64(len(buf32)) / float64(channelCount) / float64(sampleRate))
+	sleep := time.Duration(float64(time.Second) * float64(len(buf32)) / float64(ChannelCount) / float64(mux.sampleRate))
 	for {
 		if c.suspended {
 			time.Sleep(time.Second)
@@ -145,18 +84,4 @@ func (c *nullContext) loop(sampleRate int, channelCount int, mux *Mux) {
 		mux.ReadFloat32s(buf32[:])
 		time.Sleep(sleep)
 	}
-}
-
-func (c *nullContext) Suspend() error {
-	c.suspended = true
-	return nil
-}
-
-func (c *nullContext) Resume() error {
-	c.suspended = false
-	return nil
-}
-
-func (*nullContext) Err() error {
-	return nil
 }

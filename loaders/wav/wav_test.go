@@ -6,14 +6,14 @@ import (
 )
 
 func TestLoadMono(t *testing.T) {
-	_, err := wav.LoadWav("test_mono.wav", 44100)
+	_, err := wav.LoadWavFile("test_mono.wav", 44100)
 	if err == nil {
 		t.Fatalf("should not load mono tracks without error")
 	}
 }
 
 func TestLoadStereo(t *testing.T) {
-	data, err := wav.LoadWav("test_stereo.wav", 44100)
+	data, err := wav.LoadWavFile("test_stereo.wav", 44100)
 	if err != nil {
 		t.Fatalf("error loading ogg: %s", err.Error())
 	}
@@ -23,14 +23,14 @@ func TestLoadStereo(t *testing.T) {
 }
 
 func TestLoad8khz(t *testing.T) {
-	_, err := wav.LoadWav("test_8khz.wav", 44100)
+	_, err := wav.LoadWavFile("test_8khz.wav", 44100)
 	if err == nil {
 		t.Fatalf("should not load tracks in unexpected sampling rate without error")
 	}
 }
 
 func TestLoad8bit(t *testing.T) {
-	_, err := wav.LoadWav("test_8bit.wav", 44100)
+	_, err := wav.LoadWavFile("test_8bit.wav", 44100)
 	if err == nil {
 		t.Fatalf("should not load non-16bit PCM tracks without error")
 	}

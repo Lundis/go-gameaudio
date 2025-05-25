@@ -22,21 +22,10 @@ import (
 )
 
 var (
-	currentContext       *Context
 	contextCreationMutex sync.Mutex
 )
 
-var ErrContextNotCreated error = fmt.Errorf("context not created")
-
-// Context is the main object in Oto. It interacts with the audio drivers.
-//
-// To play sound with Oto, first create a context. Then use the context to create
-// an arbitrary number of sounds. Then use the sounds to play sound.
-//
-// Creating multiple contexts is NOT supported.
-type Context struct {
-	context *context
-}
+const ChannelCount = 2
 
 // NewContextOptions represents options for NewContext.
 type NewContextOptions struct {
@@ -44,10 +33,6 @@ type NewContextOptions struct {
 	// Usual numbers are 44100 or 48000. One context has only one sample rate. You cannot play multiple audio
 	// sources with different sample rates at the same time.
 	SampleRate int
-
-	// ChannelCount specifies the number of channels. One channel is mono playback. Two
-	// channels are stereo playback. No other values are supported.
-	ChannelCount int
 
 	// BufferSize specifies a buffer size in the underlying device.
 	//
@@ -58,61 +43,35 @@ type NewContextOptions struct {
 	BufferSize time.Duration
 }
 
-// NewContext creates a new context with given options.
+// InitContext creates a new context with given options.
 // A context creates and holds ready-to-use Sound objects.
-// NewContext returns a context, a channel that is closed when the context is ready, and an error if it exists.
+// InitContext returns a channel that is closed when the context is ready, and an error if it exists.
 //
 // Creating multiple contexts is NOT supported.
 func InitContext(options *NewContextOptions) (chan struct{}, error) {
 	contextCreationMutex.Lock()
 	defer contextCreationMutex.Unlock()
 
-	if currentContext != nil {
+	if mux != nil {
 		return nil, fmt.Errorf("context was already created")
 	}
 
 	var bufferSizeInBytes int
 	if options.BufferSize != 0 {
-		// The underying driver always uses 32bit floats.
-		bytesPerSample := options.ChannelCount * 4
+		// The underlying driver always uses 32bit floats.
+		bytesPerSample := ChannelCount * 4
 		bytesPerSecond := options.SampleRate * bytesPerSample
 		bufferSizeInBytes = int(int64(options.BufferSize) * int64(bytesPerSecond) / int64(time.Second))
 		bufferSizeInBytes = bufferSizeInBytes / bytesPerSample * bytesPerSample
 	}
-	ctx, ready, err := newContext(options.SampleRate, options.ChannelCount, bufferSizeInBytes)
+	initMux(options.SampleRate, ChannelCount)
+	ready, err := newContext(bufferSizeInBytes)
 	if err != nil {
 		return nil, err
 	}
-	currentContext = &Context{context: ctx}
 	return ready, nil
 }
 
-// Suspend suspends the entire audio play.
-//
-// Suspend is concurrent-safe.
-func Suspend() error {
-	if currentContext == nil {
-		return ErrContextNotCreated
-	}
-	return currentContext.context.Suspend()
-}
-
-// Resume resumes the entire audio play, which was suspended by Suspend.
-//
-// Resume is concurrent-safe.
-func Resume() error {
-	if currentContext == nil {
-		return ErrContextNotCreated
-	}
-	return currentContext.context.Resume()
-}
-
-// Err returns the current error.
-//
-// Err is concurrent-safe.
-func Err() error {
-	if currentContext == nil {
-		return ErrContextNotCreated
-	}
-	return currentContext.context.Err()
+func SampleRate() int {
+	return mux.sampleRate
 }

@@ -31,15 +31,10 @@ import (
 //
 // All the functions of a Sound returned by NewSound are concurrent-safe.
 func NewSound(data []float32, volume float32, channel ChannelId) *Sound {
-	if currentContext == nil {
+	if mux == nil {
 		return nil
 	}
-	return currentContext.context.mux.NewPlayer(data, volume, channel)
-}
-
-func (m *Mux) NewPlayer(data []float32, volume float32, channel ChannelId) *Sound {
 	pl := &Sound{
-		mux:          m,
 		data:         data,
 		volume:       volume,
 		channelId:    channel,
@@ -49,7 +44,6 @@ func (m *Mux) NewPlayer(data []float32, volume float32, channel ChannelId) *Soun
 }
 
 type Sound struct {
-	mux          *Mux
 	data         []float32
 	players      []*player
 	channelId    ChannelId
@@ -88,14 +82,14 @@ func (p *Sound) PlayLoop(crossFade time.Duration) {
 	}
 	p.m.Lock()
 	p.loop = true
-	fadeDuration := int(float64(p.mux.channelCount*p.mux.sampleRate) * crossFade.Seconds())
+	fadeDuration := int(float64(mux.channelCount*mux.sampleRate) * crossFade.Seconds())
 	p.playImpl(fadeDuration, len(p.data)-fadeDuration)
 	p.m.Unlock()
 }
 
 func (p *Sound) PlayFadeIn(fadeIn time.Duration) {
 	p.m.Lock()
-	p.playImpl(int(float64(p.mux.channelCount*p.mux.sampleRate)*fadeIn.Seconds()), len(p.data))
+	p.playImpl(int(float64(mux.channelCount*mux.sampleRate)*fadeIn.Seconds()), len(p.data))
 	p.m.Unlock()
 }
 
@@ -109,7 +103,7 @@ func (p *Sound) playImpl(fadeInEndsAt int, fadeOutStartsAt int) {
 	// re-use an existing play slot if possible
 	var freeInstance *player
 	for _, pi := range p.players {
-		if pi.pos < p.mux.sampleRate*p.mux.channelCount*p.throttlingMs/1000 && !p.loop {
+		if pi.pos < mux.sampleRate*mux.channelCount*p.throttlingMs/1000 && !p.loop {
 			// don't start playing again until throttlingMs has passed
 			return
 		}
@@ -129,7 +123,7 @@ func (p *Sound) playImpl(fadeInEndsAt int, fadeOutStartsAt int) {
 	freeInstance.fadeInEndsAt = fadeInEndsAt
 	freeInstance.fadeOutStartsAt = fadeOutStartsAt
 
-	p.mux.addSound(p)
+	mux.addSound(p)
 }
 
 func (p *Sound) Reset() {
@@ -203,7 +197,7 @@ func (p *Sound) readBufferAndAdd(buf []float32) {
 		}
 	}
 	if finishedPlaying {
-		p.mux.removeSound(p)
+		mux.removeSound(p)
 	}
 
 	p.m.Unlock()

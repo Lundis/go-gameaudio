@@ -23,16 +23,14 @@ import (
 	"unsafe"
 )
 
-type context struct {
+var jsContext struct {
 	audioContext            js.Value
 	scriptProcessor         js.Value
 	scriptProcessorCallback js.Func
 	ready                   bool
-
-	mux *Mux
 }
 
-func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*context, chan struct{}, error) {
+func newContext(bufferSizeInBytes int) (chan struct{}, error) {
 	ready := make(chan struct{})
 
 	class := js.Global().Get("AudioContext")
@@ -40,24 +38,21 @@ func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*conte
 		class = js.Global().Get("webkitAudioContext")
 	}
 	if !class.Truthy() {
-		return nil, nil, errors.New("oto: AudioContext or webkitAudioContext was not found")
+		return nil, errors.New("oto: AudioContext or webkitAudioContext was not found")
 	}
 	options := js.Global().Get("Object").New()
-	options.Set("sampleRate", sampleRate)
+	options.Set("sampleRate", mux.sampleRate)
 
-	d := &context{
-		audioContext: class.New(options),
-		mux:          NewMux(sampleRate, channelCount),
-	}
+	jsContext.audioContext = class.New(options)
 
 	if bufferSizeInBytes == 0 {
 		// 4096 was not great at least on Safari 15.
-		bufferSizeInBytes = 8192 * channelCount
+		bufferSizeInBytes = 8192 * ChannelCount
 	}
 
 	buf32 := make([]float32, bufferSizeInBytes/4)
 
-	if w := d.audioContext.Get("audioWorklet"); w.Truthy() {
+	if w := jsContext.audioContext.Get("audioWorklet"); w.Truthy() {
 		script := fmt.Sprintf(`
 class OtoWorkletProcessor extends AudioWorkletProcessor {
 	constructor() {
@@ -109,58 +104,58 @@ class OtoWorkletProcessor extends AudioWorkletProcessor {
 	}
 }
 registerProcessor('oto-worklet-processor', OtoWorkletProcessor);
-`, bufferSizeInBytes/4/channelCount, channelCount)
+`, bufferSizeInBytes/4/ChannelCount, ChannelCount)
 		w.Call("addModule", newScriptURL(script)).Call("then", js.FuncOf(func(this js.Value, arguments []js.Value) any {
-			node := js.Global().Get("AudioWorkletNode").New(d.audioContext, "oto-worklet-processor", map[string]any{
-				"outputChannelCount": []any{channelCount},
+			node := js.Global().Get("AudioWorkletNode").New(jsContext.audioContext, "oto-worklet-processor", map[string]any{
+				"outputChannelCount": []any{ChannelCount},
 			})
 			port := node.Get("port")
 			// When the worklet processor requests more data, send the request to the worklet.
 			port.Set("onmessage", js.FuncOf(func(this js.Value, arguments []js.Value) any {
-				d.mux.ReadFloat32s(buf32)
+				mux.ReadFloat32s(buf32)
 				buf := float32SliceToTypedArray(buf32)
 				port.Call("postMessage", buf, map[string]any{
 					"transfer": []any{buf.Get("buffer")},
 				})
 				return nil
 			}))
-			node.Call("connect", d.audioContext.Get("destination"))
+			node.Call("connect", jsContext.audioContext.Get("destination"))
 			return nil
 		}))
 	} else {
 		// Use ScriptProcessorNode if AudioWorklet is not available.
 
-		chBuf32 := make([][]float32, channelCount)
+		chBuf32 := make([][]float32, ChannelCount)
 		for i := range chBuf32 {
-			chBuf32[i] = make([]float32, len(buf32)/channelCount)
+			chBuf32[i] = make([]float32, len(buf32)/ChannelCount)
 		}
 
-		sp := d.audioContext.Call("createScriptProcessor", bufferSizeInBytes/4/channelCount, 0, channelCount)
+		sp := jsContext.audioContext.Call("createScriptProcessor", bufferSizeInBytes/4/ChannelCount, 0, ChannelCount)
 		f := js.FuncOf(func(this js.Value, arguments []js.Value) any {
-			d.mux.ReadFloat32s(buf32)
-			for i := 0; i < channelCount; i++ {
+			mux.ReadFloat32s(buf32)
+			for i := 0; i < ChannelCount; i++ {
 				for j := range chBuf32[i] {
-					chBuf32[i][j] = buf32[j*channelCount+i]
+					chBuf32[i][j] = buf32[j*ChannelCount+i]
 				}
 			}
 
 			buf := arguments[0].Get("outputBuffer")
 			if buf.Get("copyToChannel").Truthy() {
-				for i := 0; i < channelCount; i++ {
+				for i := 0; i < ChannelCount; i++ {
 					buf.Call("copyToChannel", float32SliceToTypedArray(chBuf32[i]), i, 0)
 				}
 			} else {
 				// copyToChannel is not defined on Safari 11.
-				for i := 0; i < channelCount; i++ {
+				for i := 0; i < ChannelCount; i++ {
 					buf.Call("getChannelData", i).Call("set", float32SliceToTypedArray(chBuf32[i]))
 				}
 			}
 			return nil
 		})
 		sp.Call("addEventListener", "audioprocess", f)
-		d.scriptProcessor = sp
-		d.scriptProcessorCallback = f
-		sp.Call("connect", d.audioContext.Get("destination"))
+		jsContext.scriptProcessor = sp
+		jsContext.scriptProcessorCallback = f
+		sp.Call("connect", jsContext.audioContext.Get("destination"))
 	}
 
 	// Browsers require user interaction to start the audio.
@@ -171,7 +166,7 @@ registerProcessor('oto-worklet-processor', OtoWorkletProcessor);
 	var onEventFired js.Func
 	var onResumeSuccess js.Func
 	onResumeSuccess = js.FuncOf(func(this js.Value, arguments []js.Value) any {
-		d.ready = true
+		jsContext.ready = true
 		close(ready)
 		for _, event := range events {
 			js.Global().Get("document").Call("removeEventListener", event, onEventFired)
@@ -181,8 +176,8 @@ registerProcessor('oto-worklet-processor', OtoWorkletProcessor);
 		return nil
 	})
 	onEventFired = js.FuncOf(func(this js.Value, arguments []js.Value) any {
-		if !d.ready {
-			d.audioContext.Call("resume").Call("then", onResumeSuccess)
+		if !jsContext.ready {
+			jsContext.audioContext.Call("resume").Call("then", onResumeSuccess)
 		}
 		return nil
 	})
@@ -190,21 +185,7 @@ registerProcessor('oto-worklet-processor', OtoWorkletProcessor);
 		js.Global().Get("document").Call("addEventListener", event, onEventFired)
 	}
 
-	return d, ready, nil
-}
-
-func (c *context) Suspend() error {
-	c.audioContext.Call("suspend")
-	return nil
-}
-
-func (c *context) Resume() error {
-	c.audioContext.Call("resume")
-	return nil
-}
-
-func (c *context) Err() error {
-	return nil
+	return ready, nil
 }
 
 func float32SliceToTypedArray(s []float32) js.Value {

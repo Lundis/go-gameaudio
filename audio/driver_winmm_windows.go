@@ -68,8 +68,6 @@ func (h *header) Close() error {
 }
 
 type winmmContext struct {
-	sampleRate        int
-	channelCount      int
 	bufferSizeInBytes int
 
 	waveOut uintptr
@@ -89,15 +87,13 @@ type winmmContext struct {
 
 var theWinMMContext *winmmContext
 
-func newWinMMContext(sampleRate, channelCount int, mux *Mux, bufferSizeInBytes int) (*winmmContext, error) {
+func newWinMMContext(bufferSizeInBytes int) (*winmmContext, error) {
 	// winmm.dll is not available on Xbox.
 	if err := winmm.Load(); err != nil {
 		return nil, fmt.Errorf("oto: loading winmm.dll failed: %w", err)
 	}
 
 	c := &winmmContext{
-		sampleRate:        sampleRate,
-		channelCount:      channelCount,
 		bufferSizeInBytes: bufferSizeInBytes,
 		mux:               mux,
 		cond:              sync.NewCond(&sync.Mutex{}),
@@ -113,12 +109,12 @@ func newWinMMContext(sampleRate, channelCount int, mux *Mux, bufferSizeInBytes i
 
 func (c *winmmContext) start() error {
 	const bitsPerSample = 32
-	nBlockAlign := c.channelCount * bitsPerSample / 8
+	nBlockAlign := ChannelCount * bitsPerSample / 8
 	f := &_WAVEFORMATEX{
 		wFormatTag:      _WAVE_FORMAT_IEEE_FLOAT,
-		nChannels:       uint16(c.channelCount),
-		nSamplesPerSec:  uint32(c.sampleRate),
-		nAvgBytesPerSec: uint32(c.sampleRate * nBlockAlign),
+		nChannels:       uint16(ChannelCount),
+		nSamplesPerSec:  uint32(mux.sampleRate),
+		nAvgBytesPerSec: uint32(mux.sampleRate * nBlockAlign),
 		nBlockAlign:     uint16(nBlockAlign),
 		wBitsPerSample:  bitsPerSample,
 	}
@@ -282,7 +278,7 @@ func (c *winmmContext) appendBuffers() {
 			case errors.Is(err, _MMSYSERR_NOMEM):
 				continue
 			case errors.Is(err, _MMSYSERR_NODRIVER):
-				sleep := time.Duration(float64(time.Second) * float64(len(c.buf32)) / float64(c.channelCount) / float64(c.sampleRate))
+				sleep := time.Duration(float64(time.Second) * float64(len(c.buf32)) / float64(ChannelCount) / float64(mux.sampleRate))
 				time.Sleep(sleep)
 				return
 			case errors.Is(err, windows.ERROR_NOT_FOUND):

@@ -71,9 +71,6 @@ func (c *comThread) Run(f func()) {
 }
 
 type wasapiContext struct {
-	sampleRate        int
-	channelCount      int
-	mux               *Mux
 	bufferSizeInBytes int
 
 	comThread     *comThread
@@ -98,16 +95,13 @@ var (
 	errFormatNotSupported = errors.New("oto: the specified format is not supported (there is the closest format instead)")
 )
 
-func newWASAPIContext(sampleRate, channelCount int, mux *Mux, bufferSizeInBytes int) (context *wasapiContext, ferr error) {
+func newWASAPIContext(bufferSizeInBytes int) (context *wasapiContext, ferr error) {
 	t, err := newCOMThread()
 	if err != nil {
 		return nil, err
 	}
 
 	c := &wasapiContext{
-		sampleRate:        sampleRate,
-		channelCount:      channelCount,
-		mux:               mux,
 		bufferSizeInBytes: bufferSizeInBytes,
 		comThread:         t,
 		suspendedCond:     sync.NewCond(&sync.Mutex{}),
@@ -244,19 +238,14 @@ func (c *wasapiContext) startOnCOMThread() (ferr error) {
 	// Stereo with 48000 [Hz] is likely supported, but mono and/or other sample rates are unlikely supported.
 	// Fallback to WinMM in this case anyway.
 	const bitsPerSample = 32
-	nBlockAlign := c.channelCount * bitsPerSample / 8
-	var channelMask uint32
-	switch c.channelCount {
-	case 1:
-		channelMask = _SPEAKER_FRONT_CENTER
-	case 2:
-		channelMask = _SPEAKER_FRONT_LEFT | _SPEAKER_FRONT_RIGHT
-	}
+	nBlockAlign := ChannelCount * bitsPerSample / 8
+	channelMask := uint32(_SPEAKER_FRONT_LEFT | _SPEAKER_FRONT_RIGHT)
+
 	f := &_WAVEFORMATEXTENSIBLE{
 		wFormatTag:      _WAVE_FORMAT_EXTENSIBLE,
-		nChannels:       uint16(c.channelCount),
-		nSamplesPerSec:  uint32(c.sampleRate),
-		nAvgBytesPerSec: uint32(c.sampleRate * nBlockAlign),
+		nChannels:       ChannelCount,
+		nSamplesPerSec:  uint32(mux.sampleRate),
+		nAvgBytesPerSec: uint32(mux.sampleRate * nBlockAlign),
 		nBlockAlign:     uint16(nBlockAlign),
 		wBitsPerSample:  bitsPerSample,
 		cbSize:          0x16,
@@ -268,7 +257,7 @@ func (c *wasapiContext) startOnCOMThread() (ferr error) {
 	var bufferSizeIn100ns _REFERENCE_TIME
 	if c.bufferSizeInBytes != 0 {
 		bufferSizeInFrames := int64(c.bufferSizeInBytes) / int64(nBlockAlign)
-		bufferSizeIn100ns = _REFERENCE_TIME(1e7 * bufferSizeInFrames / int64(c.sampleRate))
+		bufferSizeIn100ns = _REFERENCE_TIME(1e7 * bufferSizeInFrames / int64(mux.sampleRate))
 	} else {
 		// The default buffer size can be too small and might cause glitch noises.
 		// Specify 50[ms] as the buffer size.
@@ -390,14 +379,14 @@ func (c *wasapiContext) writeOnRenderThread() error {
 	}
 
 	// Calculate the buffer size.
-	if buflen := int(frames) * c.channelCount; cap(c.buf) < buflen {
+	if buflen := int(frames) * ChannelCount; cap(c.buf) < buflen {
 		c.buf = make([]float32, buflen)
 	} else {
 		c.buf = c.buf[:buflen]
 	}
 
 	// Read the buffer from the sounds.
-	c.mux.ReadFloat32s(c.buf)
+	mux.ReadFloat32s(c.buf)
 
 	// Copy the read buf to the destination buffer.
 	copy(unsafe.Slice((*float32)(unsafe.Pointer(dstBuf)), len(c.buf)), c.buf)
@@ -460,8 +449,8 @@ retry:
 
 		// Just read the buffer and discard it. Then, retry to search the device.
 		var buf32 [4096]float32
-		sleep := time.Duration(float64(time.Second) * float64(len(buf32)) / float64(c.channelCount) / float64(c.sampleRate))
-		c.mux.ReadFloat32s(buf32[:])
+		sleep := time.Duration(float64(time.Second) * float64(len(buf32)) / float64(ChannelCount) / float64(mux.sampleRate))
+		mux.ReadFloat32s(buf32[:])
 		time.Sleep(sleep)
 		goto retry
 	}

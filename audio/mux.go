@@ -28,14 +28,14 @@ type Mux struct {
 	cond   *sync.Cond
 }
 
-// NewMux creates a new Mux.
-func NewMux(sampleRate int, channelCount int) *Mux {
-	m := &Mux{
+var mux *Mux
+
+func initMux(sampleRate int, channelCount int) {
+	mux = &Mux{
 		sampleRate:   sampleRate,
 		channelCount: channelCount,
 		cond:         sync.NewCond(&sync.Mutex{}),
 	}
-	return m
 }
 
 func (m *Mux) addSound(sound *Sound) {

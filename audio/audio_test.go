@@ -25,7 +25,6 @@ import (
 func TestMain(m *testing.M) {
 	op := &audio.NewContextOptions{}
 	op.SampleRate = 48000
-	op.ChannelCount = 2
 	ready, err := audio.InitContext(op)
 	if err != nil {
 		panic(err)

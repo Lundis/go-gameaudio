@@ -21,22 +21,26 @@ import (
 	"os"
 )
 
-func LoadWav(path string, wantedSampleRate int) ([]float32, error) {
+func LoadWavFile(path string, wantedSampleRate int) ([]float32, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	if !bytes.Equal(data[0:4], []byte("RIFF")) {
+	return LoadWav(data, wantedSampleRate)
+}
+
+func LoadWav(rawData []byte, wantedSampleRate int) ([]float32, error) {
+	if !bytes.Equal(rawData[0:4], []byte("RIFF")) {
 		return nil, fmt.Errorf("wav: invalid header: 'RIFF' not found")
 	}
-	if !bytes.Equal(data[8:12], []byte("WAVE")) {
+	if !bytes.Equal(rawData[8:12], []byte("WAVE")) {
 		return nil, fmt.Errorf("wav: invalid header: 'WAVE' not found")
 	}
 
 	// Read chunks
 	headerSize := 12
 	for {
-		buf := data[headerSize : headerSize+8]
+		buf := rawData[headerSize : headerSize+8]
 		headerSize += 8
 		size := int(buf[4]) | int(buf[5])<<8 | int(buf[6])<<16 | int(buf[7])<<24
 		switch {
@@ -45,7 +49,7 @@ func LoadWav(path string, wantedSampleRate int) ([]float32, error) {
 			if size < 16 {
 				return nil, fmt.Errorf("wav: invalid header: maybe non-PCM file?")
 			}
-			buf := data[headerSize : headerSize+size]
+			buf := rawData[headerSize : headerSize+size]
 			format := int(buf[0]) | int(buf[1])<<8
 			if format != 1 {
 				return nil, fmt.Errorf("wav: format must be linear PCM")
@@ -69,7 +73,7 @@ func LoadWav(path string, wantedSampleRate int) ([]float32, error) {
 			}
 			headerSize += size
 		case bytes.Equal(buf[0:4], []byte("data")):
-			return convertInt16ToFloat32(data[headerSize : headerSize+size]), nil
+			return convertInt16ToFloat32(rawData[headerSize : headerSize+size]), nil
 		default:
 			headerSize += size
 		}

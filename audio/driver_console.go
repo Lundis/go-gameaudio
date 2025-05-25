@@ -36,14 +36,11 @@ import (
 
 //export oto_OnReadCallback
 func oto_OnReadCallback(buf *C.float, length C.size_t) {
-	theContext.mux.ReadFloat32s(unsafe.Slice((*float32)(unsafe.Pointer(buf)), length))
+	currentContext.mux.ReadFloat32s(unsafe.Slice((*float32)(unsafe.Pointer(buf)), length))
 }
 
 type context struct {
-	mux *Mux
 }
-
-var theContext *context
 
 func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*context, chan struct{}, error) {
 	ready := make(chan struct{})
@@ -52,7 +49,6 @@ func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*conte
 	c := &context{
 		mux: NewMux(sampleRate, channelCount),
 	}
-	theContext = c
 	C.oto_OpenAudioProxy(C.int(sampleRate), C.int(channelCount), C.int(bufferSizeInBytes))
 
 	return c, ready, nil

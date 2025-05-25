@@ -26,7 +26,6 @@ import (
 func main() {
 	op := &audio.NewContextOptions{}
 	op.SampleRate = internal.SampleRate
-	op.ChannelCount = internal.ChannelCount
 	op.BufferSize = 10 * time.Millisecond // this is actually ignored in windows (WASAPI)
 
 	ready, err := audio.InitContext(op)

@@ -38,13 +38,10 @@ type context struct {
 
 	cond *sync.Cond
 
-	mux *Mux
 	err atomicError
 
 	ready chan struct{}
 }
-
-var theContext *context
 
 func alsaError(name string, err C.int) error {
 	return fmt.Errorf("oto: ALSA error at %s: %s", name, C.GoString(C.snd_strerror(err)))
@@ -112,7 +109,6 @@ func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*conte
 		mux:          NewMux(sampleRate, channelCount),
 		ready:        make(chan struct{}),
 	}
-	theContext = c
 
 	go func() {
 		defer close(c.ready)

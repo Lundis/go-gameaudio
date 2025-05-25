@@ -81,14 +81,11 @@ type context struct {
 	toPause  bool
 	toResume bool
 
-	mux *Mux
 	err atomicError
 }
 
 // TODO: Convert the error code correctly.
 // See https://stackoverflow.com/questions/2196869/how-do-you-convert-an-iphone-osstatus-code-to-something-useful
-
-var theContext *context
 
 func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*context, chan struct{}, error) {
 	// defaultOneBufferSizeInBytes is the default buffer size in bytes.
@@ -114,7 +111,6 @@ func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*conte
 		mux:                  NewMux(sampleRate, channelCount),
 		oneBufferSizeInBytes: oneBufferSizeInBytes,
 	}
-	theContext = c
 
 	if err := initializeAPI(); err != nil {
 		return nil, nil, err
@@ -285,18 +281,18 @@ func (c *context) Err() error {
 }
 
 func render(inUserData unsafe.Pointer, inAQ _AudioQueueRef, inBuffer _AudioQueueBufferRef) {
-	theContext.cond.L.Lock()
-	defer theContext.cond.L.Unlock()
-	theContext.unqueuedBuffers = append(theContext.unqueuedBuffers, inBuffer)
-	theContext.cond.Signal()
+	currentContext.cond.L.Lock()
+	defer currentContext.cond.L.Unlock()
+	currentContext.unqueuedBuffers = append(currentContext.unqueuedBuffers, inBuffer)
+	currentContext.cond.Signal()
 }
 
 func setGlobalPause(self objc.ID, _cmd objc.SEL, notification objc.ID) {
-	theContext.Suspend()
+	currentContext.Suspend()
 }
 
 func setGlobalResume(self objc.ID, _cmd objc.SEL, notification objc.ID) {
-	theContext.Resume()
+	currentContext.Resume()
 }
 
 func sleepTime(count int) time.Duration {

@@ -10,7 +10,6 @@ import (
 func main() {
 	op := &audio.NewContextOptions{}
 	op.SampleRate = internal.SampleRate
-	op.ChannelCount = internal.ChannelCount
 	op.BufferSize = 10 * time.Millisecond // this is actually ignored in windows (WASAPI)
 
 	ready, err := audio.InitContext(op)
@@ -19,7 +18,7 @@ func main() {
 	}
 	<-ready
 
-	data, err := wav.LoadWav("loaders/wav/test_stereo.wav", internal.SampleRate)
+	data, err := wav.LoadWavFile("loaders/wav/test_stereo.wav", internal.SampleRate)
 	if err != nil {
 		panic(err)
 	}
