@@ -34,11 +34,11 @@ func (cid ChannelId) Pause() {
 
 func (cid ChannelId) Resume() {
 	settings := getChannelSettings(cid)
-	settings.paused = true
+	settings.paused = false
 	setChannelSettings(cid, settings)
 }
 
-var channelSettingsMap map[ChannelId]channelSettings
+var channelSettingsMap = make(map[ChannelId]channelSettings)
 var settingsLock sync.RWMutex
 
 func getChannelSettings(id ChannelId) channelSettings {
