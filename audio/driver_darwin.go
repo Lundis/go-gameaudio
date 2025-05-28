@@ -89,7 +89,7 @@ var darwinContext context
 // TODO: Convert the error code correctly.
 // See https://stackoverflow.com/questions/2196869/how-do-you-convert-an-iphone-osstatus-code-to-something-useful
 
-func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (chan struct{}, error) {
+func newContext(bufferSizeInBytes int) (chan struct{}, error) {
 	// defaultOneBufferSizeInBytes is the default buffer size in bytes.
 	//
 	// 12288 seems necessary at least on iPod touch (7th) and MacBook Pro 2020.
@@ -103,7 +103,7 @@ func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (chan s
 	} else {
 		oneBufferSizeInBytes = defaultOneBufferSizeInBytes
 	}
-	bytesPerSample := channelCount * 4
+	bytesPerSample := ChannelCount * 4
 	oneBufferSizeInBytes = oneBufferSizeInBytes / bytesPerSample * bytesPerSample
 
 	ready := make(chan struct{})
@@ -128,7 +128,7 @@ func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (chan s
 			}
 		}()
 
-		q, bs, err := newAudioQueue(sampleRate, channelCount, oneBufferSizeInBytes)
+		q, bs, err := newAudioQueue(mux.sampleRate, ChannelCount, oneBufferSizeInBytes)
 		if err != nil {
 			darwinContext.err.TryStore(err)
 			return
