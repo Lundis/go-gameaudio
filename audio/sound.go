@@ -44,14 +44,15 @@ func NewSound(data []float32, volume float32, channel ChannelId) *Sound {
 }
 
 type Sound struct {
-	data         []float32
-	players      []*player
-	channelId    ChannelId
-	volume       float32
-	m            sync.Mutex
-	throttlingMs int
-	loop         bool
-	loopedOnce   bool
+	data          []float32
+	players       []*player
+	channelId     ChannelId
+	volume        float32
+	m             sync.Mutex
+	throttlingMs  int
+	loop          bool
+	loopedOnce    bool
+	onEndCallback func()
 }
 
 type player struct {
@@ -63,6 +64,13 @@ type player struct {
 func (p *Sound) Play() {
 	p.m.Lock()
 	p.playImpl(0, len(p.data))
+	p.m.Unlock()
+}
+
+// OnEndCallback can be used to register a callback that will be called once when the sound has finished playing
+func (p *Sound) OnEndCallback(onEndCallback func()) {
+	p.m.Lock()
+	p.onEndCallback = onEndCallback
 	p.m.Unlock()
 }
 
@@ -116,7 +124,7 @@ func (p *Sound) playImpl(fadeInEndsAt int, fadeOutStartsAt int) {
 		freeInstance = &player{}
 		p.players = append(p.players, freeInstance)
 	}
-	// when looping, don't reset the currently playing instance
+	// when not looping, reset the currently playing instance
 	if !p.loop {
 		freeInstance.pos = 0
 	}
@@ -198,6 +206,10 @@ func (p *Sound) readBufferAndAdd(buf []float32) {
 	}
 	if finishedPlaying {
 		mux.removeSound(p)
+		if p.onEndCallback != nil {
+			p.onEndCallback()
+			p.onEndCallback = nil
+		}
 	}
 
 	p.m.Unlock()
