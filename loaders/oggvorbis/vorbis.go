@@ -1,27 +1,38 @@
 package oggvorbis
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 
 	"github.com/jfreymuth/oggvorbis"
 )
 
-func LoadOggVorbis(path string, expectedSampleRate int) ([]float32, error) {
-	f, err := os.Open(path)
-	defer func(f *os.File) {
-		_ = f.Close()
-	}(f)
-	data, format, err := oggvorbis.ReadAll(f)
+func LoadFile(path string, expectedSampleRate int) ([]float32, error) {
+	rawData, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("%s: failed to open: %w", path, err)
+	}
+
+	data, err := Load(rawData, expectedSampleRate)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return data, nil
+}
+
+func Load(oggData []byte, expectedSampleRate int) ([]float32, error) {
+
+	data, format, err := oggvorbis.ReadAll(bytes.NewReader(oggData))
 
 	if err != nil {
 		return nil, err
 	}
 	if format.Channels != 2 {
-		return nil, fmt.Errorf("%s: number of channels must be 2 but was %d", path, format.Channels)
+		return nil, fmt.Errorf("number of channels must be 2 but was %d", format.Channels)
 	}
 	if format.SampleRate != expectedSampleRate {
-		return nil, fmt.Errorf("%s: sample rate must be %d but was %d", path, expectedSampleRate, format.SampleRate)
+		return nil, fmt.Errorf("sample rate must be %d but was %d", expectedSampleRate, format.SampleRate)
 	}
 	return data, nil
 }

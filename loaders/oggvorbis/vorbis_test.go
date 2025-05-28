@@ -1,19 +1,19 @@
 package oggvorbis_test
 
 import (
-	vorbis "github.com/Lundis/go-gameaudio/loaders/oggvorbis"
+	"github.com/Lundis/go-gameaudio/loaders/oggvorbis"
 	"testing"
 )
 
 func TestLoadMono(t *testing.T) {
-	_, err := vorbis.LoadOggVorbis("test.ogg", 44100)
+	_, err := oggvorbis.LoadFile("test.ogg", 44100)
 	if err == nil {
 		t.Fatalf("should not load mono tracks without error")
 	}
 }
 
 func TestLoadStereo(t *testing.T) {
-	data, err := vorbis.LoadOggVorbis("test_stereo.ogg", 44100)
+	data, err := oggvorbis.LoadFile("test_stereo.ogg", 44100)
 	if err != nil {
 		t.Fatalf("error loading ogg: %s", err.Error())
 	}
@@ -23,7 +23,7 @@ func TestLoadStereo(t *testing.T) {
 }
 
 func TestLoad8khz(t *testing.T) {
-	_, err := vorbis.LoadOggVorbis("test_stereo_8khz.ogg", 44100)
+	_, err := oggvorbis.LoadFile("test_stereo_8khz.ogg", 44100)
 	if err == nil {
 		t.Fatalf("should not load tracks in unexpected sampling rate without error")
 	}
