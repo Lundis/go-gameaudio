@@ -30,8 +30,6 @@ import (
 )
 
 type context struct {
-	channelCount int
-
 	suspended bool
 
 	handle *C.snd_pcm_t
@@ -102,12 +100,10 @@ func deviceCandidates() []string {
 	return devices
 }
 
-func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*context, chan struct{}, error) {
+func newContext(bufferSizeInBytes int) (chan struct{}, error) {
 	c := &context{
-		channelCount: channelCount,
-		cond:         sync.NewCond(&sync.Mutex{}),
-		mux:          NewMux(sampleRate, channelCount),
-		ready:        make(chan struct{}),
+		cond:  sync.NewCond(&sync.Mutex{}),
+		ready: make(chan struct{}),
 	}
 
 	go func() {
@@ -147,18 +143,18 @@ func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*conte
 		const periods = 2
 		var periodSize C.snd_pcm_uframes_t
 		if bufferSizeInBytes != 0 {
-			periodSize = C.snd_pcm_uframes_t(bufferSizeInBytes / (channelCount * 4 * periods))
+			periodSize = C.snd_pcm_uframes_t(bufferSizeInBytes / (ChannelCount * 4 * periods))
 		} else {
 			periodSize = C.snd_pcm_uframes_t(1024)
 		}
 		bufferSize := periodSize * periods
-		if err := c.alsaPcmHwParams(sampleRate, channelCount, &bufferSize, &periodSize); err != nil {
+		if err := c.alsaPcmHwParams(mux.sampleRate, ChannelCount, &bufferSize, &periodSize); err != nil {
 			c.err.TryStore(err)
 			return
 		}
 
 		go func() {
-			buf32 := make([]float32, int(periodSize)*channelCount)
+			buf32 := make([]float32, int(periodSize)*ChannelCount)
 			for {
 				if !c.readAndWrite(buf32) {
 					return
@@ -167,7 +163,7 @@ func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*conte
 		}()
 	}()
 
-	return c, c.ready, nil
+	return c.ready, nil
 }
 
 func (c *context) alsaPcmHwParams(sampleRate, channelCount int, bufferSize, periodSize *C.snd_pcm_uframes_t) error {
@@ -217,10 +213,10 @@ func (c *context) readAndWrite(buf32 []float32) bool {
 		return false
 	}
 
-	c.mux.ReadFloat32s(buf32)
+	mux.ReadFloat32s(buf32)
 
 	for len(buf32) > 0 {
-		n := C.snd_pcm_writei(c.handle, unsafe.Pointer(&buf32[0]), C.snd_pcm_uframes_t(len(buf32)/c.channelCount))
+		n := C.snd_pcm_writei(c.handle, unsafe.Pointer(&buf32[0]), C.snd_pcm_uframes_t(len(buf32)/ChannelCount))
 		if n < 0 {
 			n = C.long(C.snd_pcm_recover(c.handle, C.int(n), 1))
 		}
@@ -228,7 +224,7 @@ func (c *context) readAndWrite(buf32 []float32) bool {
 			c.err.TryStore(alsaError("snd_pcm_writei or snd_pcm_recover", C.int(n)))
 			return false
 		}
-		buf32 = buf32[int(n)*c.channelCount:]
+		buf32 = buf32[int(n)*ChannelCount:]
 	}
 	return true
 }
