@@ -1,4 +1,4 @@
-package vorbis_test
+package oggvorbis_test
 
 import (
 	vorbis "github.com/Lundis/go-gameaudio/loaders/oggvorbis"

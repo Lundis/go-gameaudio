@@ -1,4 +1,4 @@
-package vorbis
+package oggvorbis
 
 import (
 	"fmt"
