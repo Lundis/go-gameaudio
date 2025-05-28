@@ -84,10 +84,12 @@ type context struct {
 	err atomicError
 }
 
+var darwinContext context
+
 // TODO: Convert the error code correctly.
 // See https://stackoverflow.com/questions/2196869/how-do-you-convert-an-iphone-osstatus-code-to-something-useful
 
-func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*context, chan struct{}, error) {
+func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (chan struct{}, error) {
 	// defaultOneBufferSizeInBytes is the default buffer size in bytes.
 	//
 	// 12288 seems necessary at least on iPod touch (7th) and MacBook Pro 2020.
@@ -106,14 +108,13 @@ func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*conte
 
 	ready := make(chan struct{})
 
-	c := &context{
+	darwinContext = context{
 		cond:                 sync.NewCond(&sync.Mutex{}),
-		mux:                  NewMux(sampleRate, channelCount),
 		oneBufferSizeInBytes: oneBufferSizeInBytes,
 	}
 
 	if err := initializeAPI(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	go func() {
@@ -129,37 +130,37 @@ func newContext(sampleRate int, channelCount int, bufferSizeInBytes int) (*conte
 
 		q, bs, err := newAudioQueue(sampleRate, channelCount, oneBufferSizeInBytes)
 		if err != nil {
-			c.err.TryStore(err)
+			darwinContext.err.TryStore(err)
 			return
 		}
-		c.audioQueue = q
-		c.unqueuedBuffers = bs
+		darwinContext.audioQueue = q
+		darwinContext.unqueuedBuffers = bs
 
 		if err := setNotificationHandler(); err != nil {
-			c.err.TryStore(err)
+			darwinContext.err.TryStore(err)
 			return
 		}
 
 		var retryCount int
 	try:
-		if osstatus := _AudioQueueStart(c.audioQueue, nil); osstatus != noErr {
+		if osstatus := _AudioQueueStart(darwinContext.audioQueue, nil); osstatus != noErr {
 			if osstatus == avAudioSessionErrorCodeCannotStartPlaying && retryCount < 100 {
 				// TODO: use sleepTime() after investigating when this error happens.
 				time.Sleep(10 * time.Millisecond)
 				retryCount++
 				goto try
 			}
-			c.err.TryStore(fmt.Errorf("oto: AudioQueueStart failed at newContext: %d", osstatus))
+			darwinContext.err.TryStore(fmt.Errorf("oto: AudioQueueStart failed at newContext: %d", osstatus))
 			return
 		}
 
 		close(ready)
 		readyClosed = true
 
-		c.loop()
+		darwinContext.loop()
 	}()
 
-	return c, ready, nil
+	return ready, nil
 }
 
 func (c *context) wait() bool {
@@ -210,7 +211,7 @@ func (c *context) appendBuffer(buf32 []float32) {
 	copy(c.unqueuedBuffers, c.unqueuedBuffers[1:])
 	c.unqueuedBuffers = c.unqueuedBuffers[:len(c.unqueuedBuffers)-1]
 
-	c.mux.ReadFloat32s(buf32)
+	mux.ReadFloat32s(buf32)
 	copy(unsafe.Slice((*float32)(unsafe.Pointer(buf.mAudioData)), buf.mAudioDataByteSize/float32SizeInBytes), buf32)
 
 	if osstatus := _AudioQueueEnqueueBuffer(c.audioQueue, buf, 0, nil); osstatus != noErr {
@@ -281,18 +282,18 @@ func (c *context) Err() error {
 }
 
 func render(inUserData unsafe.Pointer, inAQ _AudioQueueRef, inBuffer _AudioQueueBufferRef) {
-	currentContext.cond.L.Lock()
-	defer currentContext.cond.L.Unlock()
-	currentContext.unqueuedBuffers = append(currentContext.unqueuedBuffers, inBuffer)
-	currentContext.cond.Signal()
+	darwinContext.cond.L.Lock()
+	defer darwinContext.cond.L.Unlock()
+	darwinContext.unqueuedBuffers = append(darwinContext.unqueuedBuffers, inBuffer)
+	darwinContext.cond.Signal()
 }
 
 func setGlobalPause(self objc.ID, _cmd objc.SEL, notification objc.ID) {
-	currentContext.Suspend()
+	darwinContext.Suspend()
 }
 
 func setGlobalResume(self objc.ID, _cmd objc.SEL, notification objc.ID) {
-	currentContext.Resume()
+	darwinContext.Resume()
 }
 
 func sleepTime(count int) time.Duration {
