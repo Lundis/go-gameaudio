@@ -9,6 +9,15 @@ I've stripped out io.Reader, instead using only []float32 - no conversions to de
 You need to load your sounds into memory.
 
 ## Changes compared to Oto:
+- Added abstraction layer for music: playlist
+  - a playlist contains one or more tracks 
+  - load playlists through virtual folders containing OGGs and playlist.json.
+  - define playlist.IDs for your playlists and play them through those.
+  - volume and muting can be controlled through audio.ChannelIdMusic
+- Added abstraction layer for sound effects: sfx
+  - load SFXs through virtual folders containing WAVs and sfx.json.
+  - define sfx.Ids for your sound effects and play them through those.
+  - volume and muting can be controlled through audio.ChannelIdSfx
 - Player was renamed to Sound.
 - One sound can play multiple times simultaneously, without needing to create multiple instances of it.
 - Looping sounds (with crossfade), for simple music or ambient setups
