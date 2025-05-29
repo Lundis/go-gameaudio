@@ -43,8 +43,8 @@ func (fs *Scheduler) PlaySoundEffectAtFadeIn(id Id, at float64, fadeIn time.Dura
 	})
 }
 
-func (fs *Scheduler) PlaySoundEffectAtRandomFadeIn(id Id, at float64, maxFadeIn time.Duration) {
-	fs.PlaySoundEffectAtFadeIn(id, at, time.Duration(rand.Int64N(maxFadeIn.Milliseconds()))*time.Millisecond)
+func (fs *Scheduler) PlaySoundEffectAtRandomFadeIn(id Id, at float64, maxFadeInMilliSeconds int) {
+	fs.PlaySoundEffectAtFadeIn(id, at, time.Duration(rand.IntN(maxFadeInMilliSeconds))*time.Millisecond)
 }
 
 func (fs *Scheduler) Clear() {
@@ -62,6 +62,8 @@ func (fs *Scheduler) Process(now float64) {
 			fs.sounds[i] = fs.sounds[len(fs.sounds)-1]
 			fs.sounds = fs.sounds[:len(fs.sounds)-1]
 			continue
+		} else {
+			i++
 		}
 	}
 }
