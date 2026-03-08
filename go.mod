@@ -1,12 +1,13 @@
 module github.com/Lundis/go-gameaudio
 
-go 1.23.0
+go 1.25.0
 
 require (
-	github.com/ebitengine/purego v0.9.0-alpha.5
+	github.com/ebitengine/purego v0.10.0
 	github.com/jfreymuth/oggvorbis v1.0.5
-	golang.org/x/sys v0.33.0
-	golang.org/x/tools v0.33.0
+	golang.org/x/sys v0.42.0
+	golang.org/x/tools v0.36.1-0.20250903222949-a5c0eb837c9f
+	golang.org/x/tools/godoc v0.1.0-deprecated
 )
 
 require github.com/jfreymuth/vorbis v1.0.2 // indirect
