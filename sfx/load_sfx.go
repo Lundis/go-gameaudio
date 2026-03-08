@@ -3,13 +3,14 @@ package sfx
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Lundis/go-gameaudio/audio"
-	"github.com/Lundis/go-gameaudio/loaders/wav"
-	"golang.org/x/tools/godoc/vfs"
 	"io"
 	"log"
 	"sync"
 	"time"
+
+	"github.com/Lundis/go-gameaudio/audio"
+	"github.com/Lundis/go-gameaudio/loaders/wav"
+	"golang.org/x/tools/godoc/vfs"
 )
 
 var lock sync.RWMutex
@@ -33,8 +34,11 @@ func Load(fileSystem vfs.Opener) error {
 		return err
 	}
 	effects := make(map[Id]*Sfx, len(soundEffects))
+	failures := 0
 	for _, e := range soundEffects {
-		for _, v := range e.Variations {
+		tmp := e.Variations
+		e.Variations = make([]*SfxVariant, 0, len(tmp))
+		for _, v := range tmp {
 			mem, ok := cachedDiskReads[v.Path]
 			if !ok {
 				raw, err := readFile(fileSystem, v.Path)
@@ -50,13 +54,18 @@ func Load(fileSystem vfs.Opener) error {
 				cachedDiskReads[v.Path] = mem
 			}
 			v.sound = audio.NewSound(mem, e.Volume*v.Volume, audio.ChannelIdSfx)
+			e.Variations = append(e.Variations, v)
 		}
-		effects[e.Id] = e
+		if len(e.Variations) > 0 {
+			effects[e.Id] = e
+		} else {
+			failures++
+		}
 	}
 	loadedSfx = effects
 
-	log.Printf("Loaded %d sound effects in %.2fs\n", len(loadedSfx),
-		time.Since(start).Seconds())
+	log.Printf("Loaded %d sound effects in %.2fs. %d failures occured\n", len(loadedSfx),
+		time.Since(start).Seconds(), failures)
 	return nil
 }
 
