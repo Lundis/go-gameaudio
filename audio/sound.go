@@ -77,6 +77,7 @@ func (p *Sound) OnEndCallback(onEndCallback func()) {
 func (p *Sound) Stop() {
 	p.m.Lock()
 	p.loop = false
+	p.onEndCallback = nil
 	p.players = p.players[:0]
 	p.m.Unlock()
 }
