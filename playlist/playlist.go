@@ -1,8 +1,9 @@
 package playlist
 
 import (
-	"github.com/Lundis/go-gameaudio/audio"
 	"time"
+
+	"github.com/Lundis/go-gameaudio/audio"
 )
 
 var playLists map[Id]*PlayList
@@ -43,11 +44,13 @@ func CurrentTrack() *Track {
 func (playListId Id) Play() {
 	lock.RLock()
 	defer lock.RUnlock()
-	audio.ChannelIdMusic.Resume()
-	if currentPlayList != nil && currentPlayList.Id == playListId {
-		return
+	if currentPlayList != nil {
+		if currentPlayList.Id == playListId {
+			return
+		}
+		currentPlayList.stop()
+		currentPlayList = nil
 	}
-	currentPlayList = nil
 	if pl, ok := playLists[playListId]; ok {
 		currentPlayList = pl
 		currentPlayList.play()
