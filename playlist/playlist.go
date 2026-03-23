@@ -19,6 +19,7 @@ type PlayList struct {
 type Track struct {
 	Path   string
 	Name   string
+	Album  string
 	Author string
 	Volume float32
 	sound  *audio.Sound
