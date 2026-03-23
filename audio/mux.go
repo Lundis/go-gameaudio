@@ -15,17 +15,12 @@
 
 package audio
 
-import (
-	"sync"
-)
-
 // Mux is a low-level multiplexer of audio sounds.
 type Mux struct {
 	sampleRate   int
 	channelCount int
 
 	sounds map[*Sound]struct{}
-	cond   *sync.Cond
 }
 
 var mux *Mux
@@ -34,41 +29,37 @@ func initMux(sampleRate int, channelCount int) {
 	mux = &Mux{
 		sampleRate:   sampleRate,
 		channelCount: channelCount,
-		cond:         sync.NewCond(&sync.Mutex{}),
 	}
 }
 
 func (m *Mux) addSound(sound *Sound) {
-	m.cond.L.Lock()
-	defer m.cond.L.Unlock()
 
 	if m.sounds == nil {
 		m.sounds = map[*Sound]struct{}{}
 	}
 	m.sounds[sound] = struct{}{}
-	m.cond.Signal()
 }
 
 func (m *Mux) removeSound(sound *Sound) {
-	m.cond.L.Lock()
-	defer m.cond.L.Unlock()
-
 	delete(m.sounds, sound)
-	m.cond.Signal()
 }
 
 // ReadFloat32s fills buf with the multiplexed data of the sounds as float32 values.
 func (m *Mux) ReadFloat32s(buf []float32) {
-	m.cond.L.Lock()
-	sounds := make([]*Sound, 0, len(m.sounds))
-	for p := range m.sounds {
-		sounds = append(sounds, p)
+
+loop:
+	for {
+		select {
+		case request := <-playRequests:
+			request.sound.playImpl(request.fadeInEndsAt, request.fadeOutStartsAt)
+		default:
+			break loop
+		}
 	}
-	m.cond.L.Unlock()
 
 	clear(buf)
-	for _, p := range sounds {
+	for p := range m.sounds {
 		p.readBufferAndAdd(buf)
 	}
-	m.cond.Signal()
+
 }

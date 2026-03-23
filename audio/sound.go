@@ -61,10 +61,51 @@ type player struct {
 	fadeOutStartsAt int
 }
 
+type playRequest struct {
+	sound           *Sound
+	fadeInEndsAt    int
+	fadeOutStartsAt int
+}
+
+var playRequests = make(chan playRequest, 100)
+
 func (p *Sound) Play() {
-	p.m.Lock()
-	p.playImpl(0, len(p.data))
-	p.m.Unlock()
+	select {
+	case playRequests <- playRequest{
+		sound:           p,
+		fadeInEndsAt:    0,
+		fadeOutStartsAt: len(p.data),
+	}:
+	default:
+	}
+}
+
+// PlayLoop starts playing this sound in an infinite loop.
+// If the sound is already playing, it will not reset it.
+// If it's playing multiple instances right now, this will cause all of them to loop.
+func (p *Sound) PlayLoop(crossFade time.Duration) {
+	if p.loop {
+		return
+	}
+	p.loop = true
+
+	fadeDuration := int(float64(mux.channelCount*mux.sampleRate) * crossFade.Seconds())
+	playRequests <- playRequest{
+		sound:           p,
+		fadeInEndsAt:    fadeDuration,
+		fadeOutStartsAt: len(p.data) - fadeDuration,
+	}
+}
+
+func (p *Sound) PlayFadeIn(fadeIn time.Duration) {
+	select {
+	case playRequests <- playRequest{
+		sound:           p,
+		fadeInEndsAt:    int(float64(mux.channelCount*mux.sampleRate) * fadeIn.Seconds()),
+		fadeOutStartsAt: len(p.data),
+	}:
+	default:
+	}
 }
 
 // OnEndCallback can be used to register a callback that will be called once when the sound has finished playing
@@ -77,35 +118,15 @@ func (p *Sound) OnEndCallback(onEndCallback func()) {
 func (p *Sound) Stop() {
 	p.m.Lock()
 	p.loop = false
-	p.onEndCallback = nil
+	if p.onEndCallback != nil {
+		p.onEndCallback = nil
+	}
 	p.players = p.players[:0]
 	p.m.Unlock()
 }
 
-// PlayLoop starts playing this sound in an infinite loop.
-// If the sound is already playing, it will not reset it.
-// If it's playing multiple instances right now, this will cause all of them to loop.
-func (p *Sound) PlayLoop(crossFade time.Duration) {
-	if p.loop {
-		return
-	}
-	p.m.Lock()
-	p.loop = true
-	fadeDuration := int(float64(mux.channelCount*mux.sampleRate) * crossFade.Seconds())
-	p.playImpl(fadeDuration, len(p.data)-fadeDuration)
-	p.m.Unlock()
-}
-
-func (p *Sound) PlayFadeIn(fadeIn time.Duration) {
-	p.m.Lock()
-	p.playImpl(int(float64(mux.channelCount*mux.sampleRate)*fadeIn.Seconds()), len(p.data))
-	p.m.Unlock()
-}
-
 func (p *Sound) SetThrottlingMs(ms int) {
-	p.m.Lock()
 	p.throttlingMs = ms
-	p.m.Unlock()
 }
 
 func (p *Sound) playImpl(fadeInEndsAt int, fadeOutStartsAt int) {
@@ -142,9 +163,6 @@ func (p *Sound) Reset() {
 }
 
 func (p *Sound) IsPlaying() bool {
-	p.m.Lock()
-	defer p.m.Unlock()
-
 	for _, i := range p.players {
 		if i.pos < len(p.data) {
 			return true
@@ -159,10 +177,9 @@ func (p *Sound) readBufferAndAdd(buf []float32) {
 		return
 	}
 
-	p.m.Lock()
-
 	volumeMultiplier := p.volume * channelSettings.volume
 	finishedPlaying := true
+	p.m.Lock()
 	for _, playInstance := range p.players {
 		available := len(p.data) - playInstance.pos
 		if p.loop {
@@ -205,13 +222,15 @@ func (p *Sound) readBufferAndAdd(buf []float32) {
 			finishedPlaying = false
 		}
 	}
+	p.m.Unlock()
 	if finishedPlaying {
 		mux.removeSound(p)
 		if p.onEndCallback != nil {
 			p.onEndCallback()
+
+			p.m.Lock()
 			p.onEndCallback = nil
+			p.m.Unlock()
 		}
 	}
-
-	p.m.Unlock()
 }

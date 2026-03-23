@@ -1,6 +1,8 @@
 package playlist
 
 import (
+	"log"
+	"math/rand"
 	"time"
 
 	"github.com/Lundis/go-gameaudio/audio"
@@ -41,7 +43,7 @@ func CurrentTrack() *Track {
 	return currentPlayList.Tracks[currentPlayList.currentTrack]
 }
 
-func (playListId Id) Play() {
+func (playListId Id) Play(shuffle bool) {
 	lock.RLock()
 	defer lock.RUnlock()
 	if currentPlayList != nil {
@@ -53,6 +55,9 @@ func (playListId Id) Play() {
 	}
 	if pl, ok := playLists[playListId]; ok {
 		currentPlayList = pl
+		if shuffle {
+			currentPlayList.currentTrack = rand.Intn(len(currentPlayList.Tracks))
+		}
 		currentPlayList.play()
 	}
 }
@@ -80,5 +85,6 @@ func (pl *PlayList) stop() {
 func (pl *PlayList) PlayNext() {
 	pl.stop()
 	pl.currentTrack = (pl.currentTrack + 1) % len(pl.Tracks)
+	log.Println("INFO: playing next track", pl.Tracks[pl.currentTrack].Name)
 	pl.play()
 }
