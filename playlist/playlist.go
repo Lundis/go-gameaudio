@@ -29,6 +29,17 @@ func Pause() {
 	audio.ChannelIdMusic.Pause()
 }
 
+func CurrentPlaylist() *PlayList {
+	return currentPlayList
+}
+
+func CurrentTrack() *Track {
+	if currentPlayList == nil {
+		return nil
+	}
+	return currentPlayList.Tracks[currentPlayList.currentTrack]
+}
+
 func (playListId Id) Play() {
 	lock.RLock()
 	defer lock.RUnlock()
@@ -47,9 +58,8 @@ func (pl *PlayList) play() {
 	track := pl.Tracks[pl.currentTrack]
 	if !track.sound.IsPlaying() {
 		if len(pl.Tracks) > 1 {
-			// TODO on-end callback
 			track.sound.Play()
-			track.sound.OnEndCallback(pl.playNext)
+			track.sound.OnEndCallback(pl.PlayNext)
 		} else {
 			track.sound.PlayLoop(time.Second)
 		}
@@ -64,7 +74,7 @@ func (pl *PlayList) stop() {
 	}
 }
 
-func (pl *PlayList) playNext() {
+func (pl *PlayList) PlayNext() {
 	pl.stop()
 	pl.currentTrack = (pl.currentTrack + 1) % len(pl.Tracks)
 	pl.play()
