@@ -1,8 +1,9 @@
 package wav_test
 
 import (
-	"github.com/Lundis/go-gameaudio/loaders/wav"
 	"testing"
+
+	"github.com/Lundis/go-gameaudio/loaders/wav"
 )
 
 func TestLoadMono(t *testing.T) {
@@ -24,8 +25,8 @@ func TestLoadStereo(t *testing.T) {
 
 func TestLoad8khz(t *testing.T) {
 	_, err := wav.LoadWavFile("test_8khz.wav", 44100)
-	if err == nil {
-		t.Fatalf("should not load tracks in unexpected sampling rate without error")
+	if err != nil {
+		t.Fatalf("Error resampling 8khz wav: %s", err.Error())
 	}
 }
 

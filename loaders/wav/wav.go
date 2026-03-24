@@ -19,6 +19,8 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+
+	"github.com/Lundis/go-gameaudio/loaders/resample"
 )
 
 func LoadWavFile(path string, wantedSampleRate int) ([]float32, error) {
@@ -37,6 +39,7 @@ func LoadWav(rawData []byte, wantedSampleRate int) ([]float32, error) {
 		return nil, fmt.Errorf("wav: invalid header: 'WAVE' not found")
 	}
 
+	var sampleRate int
 	// Read chunks
 	headerSize := 12
 	for {
@@ -67,13 +70,11 @@ func LoadWav(rawData []byte, wantedSampleRate int) ([]float32, error) {
 			if bitsPerSample != 16 {
 				return nil, fmt.Errorf("wav: bits per sample must be 16 but was %d", bitsPerSample)
 			}
-			sampleRate := int(buf[4]) | int(buf[5])<<8 | int(buf[6])<<16 | int(buf[7])<<24
-			if sampleRate != wantedSampleRate {
-				return nil, fmt.Errorf("wav: sample rate must be %d but was %d", wantedSampleRate, sampleRate)
-			}
+			sampleRate = int(buf[4]) | int(buf[5])<<8 | int(buf[6])<<16 | int(buf[7])<<24
 			headerSize += size
 		case bytes.Equal(buf[0:4], []byte("data")):
-			return convertInt16ToFloat32(rawData[headerSize : headerSize+size]), nil
+			samples := convertInt16ToFloat32(rawData[headerSize : headerSize+size])
+			return resample.Stereo(samples, sampleRate, wantedSampleRate), nil
 		default:
 			headerSize += size
 		}

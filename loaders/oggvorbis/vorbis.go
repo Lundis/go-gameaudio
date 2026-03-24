@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Lundis/go-gameaudio/loaders/resample"
 	"github.com/jfreymuth/oggvorbis"
 )
 
@@ -31,8 +32,5 @@ func Load(oggData []byte, expectedSampleRate int) ([]float32, error) {
 	if format.Channels != 2 {
 		return nil, fmt.Errorf("number of channels must be 2 but was %d", format.Channels)
 	}
-	if format.SampleRate != expectedSampleRate {
-		return nil, fmt.Errorf("sample rate must be %d but was %d", expectedSampleRate, format.SampleRate)
-	}
-	return data, nil
+	return resample.Stereo(data, format.SampleRate, expectedSampleRate), nil
 }
