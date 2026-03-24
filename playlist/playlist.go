@@ -43,6 +43,19 @@ func CurrentTrack() *Track {
 	return currentPlayList.Tracks[currentPlayList.currentTrack]
 }
 
+func Seek(percentage float32) {
+	if track := CurrentTrack(); track != nil {
+		track.sound.Seek(percentage)
+	}
+}
+
+func Seconds() (current, total float32) {
+	if track := CurrentTrack(); track != nil {
+		return track.sound.Seconds()
+	}
+	return
+}
+
 func (playListId Id) Play(shuffle bool) {
 	lock.RLock()
 	defer lock.RUnlock()
@@ -86,5 +99,12 @@ func (pl *PlayList) PlayNext() {
 	pl.stop()
 	pl.currentTrack = (pl.currentTrack + 1) % len(pl.Tracks)
 	log.Println("INFO: playing next track", pl.Tracks[pl.currentTrack].Name)
+	pl.play()
+}
+
+func (pl *PlayList) PlayPrevious() {
+	pl.stop()
+	pl.currentTrack = (pl.currentTrack - 1 + len(pl.Tracks)) % len(pl.Tracks)
+	log.Println("INFO: playing previous track", pl.Tracks[pl.currentTrack].Name)
 	pl.play()
 }

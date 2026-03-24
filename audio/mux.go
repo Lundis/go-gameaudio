@@ -51,7 +51,14 @@ loop:
 	for {
 		select {
 		case request := <-playRequests:
-			request.sound.playImpl(request.fadeInEndsAt, request.fadeOutStartsAt)
+			if request.seek == 0 || len(request.sound.players) == 0 {
+				request.sound.playImpl(request.fadeInEndsAt, request.fadeOutStartsAt)
+			}
+			if request.seek > 0 {
+				request.sound.players[0].pos = int(request.seek * float32(len(request.sound.data)))
+				// align to sample, so we don't end up switch left/right!
+				request.sound.players[0].pos -= request.sound.players[0].pos % m.channelCount
+			}
 		default:
 			break loop
 		}

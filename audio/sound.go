@@ -65,6 +65,7 @@ type playRequest struct {
 	sound           *Sound
 	fadeInEndsAt    int
 	fadeOutStartsAt int
+	seek            float32
 }
 
 var playRequests = make(chan playRequest, 100)
@@ -78,6 +79,31 @@ func (p *Sound) Play() {
 	}:
 	default:
 	}
+}
+
+// Seek a playing sound to a given percentage
+// If the sound is not playing, it starts playing
+// If multiple instances of the sound is playing, this only affects the first one
+func (p *Sound) Seek(percentage float32) {
+	select {
+	case playRequests <- playRequest{
+		sound: p,
+		seek:  percentage,
+	}:
+	default:
+	}
+}
+
+// Seconds return the current position and total length of the first currently playing instance of this sound
+func (p *Sound) Seconds() (current, total float32) {
+	samplesPerSecond := float32(mux.channelCount * mux.sampleRate)
+	// using a loop here to avoid racing conditions on the slice length
+	for _, p2 := range p.players {
+		current = float32(p2.pos) / samplesPerSecond
+		break
+	}
+	total = float32(len(p.data)) / samplesPerSecond
+	return
 }
 
 // PlayLoop starts playing this sound in an infinite loop.
