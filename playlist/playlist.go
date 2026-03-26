@@ -20,12 +20,13 @@ type PlayList struct {
 }
 
 type Track struct {
-	Path   string
-	Name   string
-	Album  string
-	Author string
-	Volume float32
-	sound  *audio.Sound
+	Path         string
+	Name         string
+	Album        string
+	Author       string
+	Volume       float32
+	sound        *audio.Sound
+	playingSound *audio.PlayingSound
 }
 
 func Pause() {
@@ -44,14 +45,14 @@ func CurrentTrack() *Track {
 }
 
 func Seek(percentage float32) {
-	if track := CurrentTrack(); track != nil {
-		track.sound.Seek(percentage)
+	if track := CurrentTrack(); track != nil && track.playingSound != nil {
+		track.playingSound.Seek(percentage)
 	}
 }
 
 func Seconds() (current, total float32) {
-	if track := CurrentTrack(); track != nil {
-		return track.sound.Seconds()
+	if track := CurrentTrack(); track != nil && track.playingSound != nil {
+		return track.playingSound.Seconds()
 	}
 	return
 }
@@ -77,22 +78,22 @@ func (playListId Id) Play(shuffle bool) {
 
 func (pl *PlayList) play() {
 	track := pl.Tracks[pl.currentTrack]
-	if !track.sound.IsPlaying() {
+	if track.playingSound == nil || !track.playingSound.IsPlaying() {
 		if len(pl.Tracks) > 1 {
-			track.sound.Play()
-			track.sound.OnEndCallback(pl.PlayNext)
+			track.playingSound = track.sound.Play()
+			track.playingSound.OnEndCallback(pl.PlayNext)
 		} else {
-			track.sound.PlayLoop(time.Second)
+			track.playingSound = track.sound.PlayLoop(time.Second)
 		}
 	}
-
 }
 
 func (pl *PlayList) stop() {
 	track := pl.Tracks[pl.currentTrack]
-	if track.sound.IsPlaying() {
-		track.sound.Stop()
+	if track.playingSound != nil && track.playingSound.IsPlaying() {
+		track.playingSound.StopFadeOut(time.Second)
 	}
+	track.playingSound = nil
 }
 
 func (pl *PlayList) PlayNext() {
