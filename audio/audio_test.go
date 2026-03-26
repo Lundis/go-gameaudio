@@ -16,10 +16,11 @@
 package audio_test
 
 import (
-	"github.com/Lundis/go-gameaudio/audio"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/Lundis/go-gameaudio/audio"
 )
 
 func TestMain(m *testing.M) {
@@ -34,9 +35,9 @@ func TestMain(m *testing.M) {
 }
 
 func TestEmptyPlayer(t *testing.T) {
-	p := audio.NewSound(make([]float32, 0), 1, audio.ChannelIdDefault)
-	p.Play()
-	for p.IsPlaying() {
+	sound := audio.NewSound(make([]float32, 0), 1, audio.ChannelIdDefault)
+	playingSound := sound.Play()
+	for playingSound.IsPlaying() {
 		time.Sleep(time.Millisecond)
 	}
 }
