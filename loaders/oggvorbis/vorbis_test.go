@@ -1,8 +1,9 @@
 package oggvorbis_test
 
 import (
-	"github.com/Lundis/go-gameaudio/loaders/oggvorbis"
 	"testing"
+
+	"github.com/Lundis/go-gameaudio/loaders/oggvorbis"
 )
 
 func TestLoadMono(t *testing.T) {
@@ -29,5 +30,11 @@ func TestLoad8khzResampled(t *testing.T) {
 	}
 	if len(data) == 0 {
 		t.Fatalf("no data after resampling")
+	}
+}
+
+func BenchmarkLoadFile(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		oggvorbis.LoadFile("Boardwalk-Arcade-2.ogg", 44100)
 	}
 }
