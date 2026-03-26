@@ -35,10 +35,9 @@ func NewSound(data []float32, volume float32, channel ChannelId) *Sound {
 		return nil
 	}
 	pl := &Sound{
-		data:         data,
-		volume:       volume,
-		channelId:    channel,
-		throttlingMs: 50,
+		data:      data,
+		volume:    volume,
+		channelId: channel,
 	}
 	return pl
 }
@@ -151,8 +150,6 @@ func (p *Sound) Stop() {
 	p.m.Unlock()
 }
 
-func (p *Sound) SetThrottlingMs(ms int) {
-	p.throttlingMs = ms
 }
 
 func (p *Sound) playImpl(fadeInEndsAt int, fadeOutStartsAt int) {
