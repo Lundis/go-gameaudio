@@ -8,6 +8,7 @@ import (
 	"golang.org/x/tools/godoc/vfs"
 	"io"
 	"log"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -31,23 +32,70 @@ func Load(fileSystem vfs.Opener) error {
 	if err != nil {
 		return err
 	}
-	effects := make(map[Id]*PlayList, len(playlists))
-playlistLoop:
-	for _, pl := range playlists {
+	workers := runtime.GOMAXPROCS(0) - 1
+	if workers < 1 {
+		workers = 1
+	}
+
+	type loadResult struct {
+		plIdx int
+		track *Track
+		sound *audio.Sound
+		err   error
+	}
+
+	sem := make(chan struct{}, workers)
+	resultCh := make(chan loadResult)
+	var wg sync.WaitGroup
+
+	for i, pl := range playlists {
 		for _, track := range pl.Tracks {
-			raw, err := readFile(fileSystem, track.Path)
-			if err != nil {
-				log.Println("Failed to read music track from disk", track.Path, ":", err.Error())
-				continue playlistLoop
-			}
-			mem, err := oggvorbis.Load(raw, audio.SampleRate())
-			if err != nil {
-				log.Println("Failed to decompress music", track.Path, ":", err.Error())
-				continue playlistLoop
-			}
-			track.sound = audio.NewSound(mem, track.Volume, audio.ChannelIdMusic)
+			wg.Add(1)
+			go func(plIdx int, track *Track) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+
+				raw, err := readFile(fileSystem, track.Path)
+				if err != nil {
+					log.Println("Failed to read music track from disk", track.Path, ":", err.Error())
+					resultCh <- loadResult{plIdx: plIdx, err: err}
+					return
+				}
+				mem, err := oggvorbis.Load(raw, audio.SampleRate())
+				if err != nil {
+					log.Println("Failed to decompress music", track.Path, ":", err.Error())
+					resultCh <- loadResult{plIdx: plIdx, err: err}
+					return
+				}
+				resultCh <- loadResult{
+					plIdx: plIdx,
+					track: track,
+					sound: audio.NewSound(mem, track.Volume, audio.ChannelIdMusic),
+				}
+			}(i, track)
 		}
-		effects[pl.Id] = pl
+	}
+
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	failedPlaylists := make(map[int]bool)
+	for result := range resultCh {
+		if result.err != nil {
+			failedPlaylists[result.plIdx] = true
+		} else {
+			result.track.sound = result.sound
+		}
+	}
+
+	effects := make(map[Id]*PlayList, len(playlists))
+	for i, pl := range playlists {
+		if !failedPlaylists[i] {
+			effects[pl.Id] = pl
+		}
 	}
 	playLists = effects
 
