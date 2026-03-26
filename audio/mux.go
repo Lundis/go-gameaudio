@@ -15,33 +15,47 @@
 
 package audio
 
+import "sync"
+
 // Mux is a low-level multiplexer of audio sounds.
 type Mux struct {
 	sampleRate   int
 	channelCount int
 
-	sounds map[*Sound]struct{}
+	sounds []*PlayingSound
 }
 
 var mux *Mux
+
+const soundPoolSize = 500
+
+var soundPool = make([]PlayingSound, soundPoolSize)
+var nextFreeSoundPoolIndex = 0
+var soundPoolLock sync.Mutex
+
+func getFreePlayingSound(s *Sound) (ps *PlayingSound) {
+	soundPoolLock.Lock()
+	if nextFreeSoundPoolIndex < soundPoolSize {
+		ps = &soundPool[nextFreeSoundPoolIndex]
+		nextFreeSoundPoolIndex++
+		ps.sound = s
+		ps.pos = 0
+		ps.endAt = len(s.data)
+		ps.fadeInEndsAt = 0
+		ps.fadeOutStartsAt = len(s.data)
+		ps.seekTo = -1
+		ps.loop = false
+		ps.loopedOnce = false
+	}
+	soundPoolLock.Unlock()
+	return ps
+}
 
 func initMux(sampleRate int, channelCount int) {
 	mux = &Mux{
 		sampleRate:   sampleRate,
 		channelCount: channelCount,
 	}
-}
-
-func (m *Mux) addSound(sound *Sound) {
-
-	if m.sounds == nil {
-		m.sounds = map[*Sound]struct{}{}
-	}
-	m.sounds[sound] = struct{}{}
-}
-
-func (m *Mux) removeSound(sound *Sound) {
-	delete(m.sounds, sound)
 }
 
 // ReadFloat32s fills buf with the multiplexed data of the sounds as float32 values.
