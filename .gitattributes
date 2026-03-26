@@ -1,1 +1,4 @@
 audio/internal/oboe/** linguist-vendored
+
+*.ogg binary
+*.wav binary
