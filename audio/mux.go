@@ -17,7 +17,6 @@ package audio
 
 import (
 	"log"
-	"sync"
 )
 
 // Mux is a low-level multiplexer of audio sounds.
@@ -30,17 +29,19 @@ type Mux struct {
 
 var mux *Mux
 
-const soundPoolSize = 500
+const soundPoolSize = 128
 
 var soundPool = make([]PlayingSound, soundPoolSize)
-var nextFreeSoundPoolIndex = 0
-var soundPoolLock sync.Mutex
 
 func getFreePlayingSound(s *Sound) (ps *PlayingSound) {
-	soundPoolLock.Lock()
-	if nextFreeSoundPoolIndex < soundPoolSize {
-		ps = &soundPool[nextFreeSoundPoolIndex]
-		nextFreeSoundPoolIndex++
+	for i := 0; i < soundPoolSize; i++ {
+		ps2 := &soundPool[i]
+		if ps2.pos >= ps2.endAt && !ps2.loop {
+			ps = ps2
+			break
+		}
+	}
+	if ps != nil {
 		ps.sound = s
 		ps.pos = 0
 		ps.endAt = len(s.data)
@@ -52,7 +53,6 @@ func getFreePlayingSound(s *Sound) (ps *PlayingSound) {
 	} else {
 		log.Println("WARNING: sound pool is full. Throttle your SFX!")
 	}
-	soundPoolLock.Unlock()
 	return ps
 }
 
@@ -65,31 +65,18 @@ func initMux(sampleRate int, channelCount int) {
 
 // ReadFloat32s fills buf with the multiplexed data of the sounds as float32 values.
 func (m *Mux) ReadFloat32s(buf []float32) {
-	soundPoolLock.Lock()
-	i := 0
-	// doing cleanup outside the play loop to avoid lock sync overhead in the loop
-	for i < nextFreeSoundPoolIndex {
-		ps := &soundPool[i]
-		if ps.pos >= ps.endAt {
-			soundPool[i] = soundPool[nextFreeSoundPoolIndex]
-			nextFreeSoundPoolIndex--
-		} else {
-			i++
-		}
-
-	}
-	currentLength := nextFreeSoundPoolIndex
-	soundPoolLock.Unlock()
 
 	clear(buf)
-	for i := 0; i < currentLength; i++ {
+	for i := 0; i < soundPoolSize; i++ {
 		ps := &soundPool[i]
 		if ps.seekTo >= 0 {
-			ps.Seek(ps.seekTo)
 			ps.pos = int(ps.seekTo * float32(ps.endAt))
 			// align to frame
 			ps.pos = ps.pos - ps.pos%(mux.channelCount)
 			ps.seekTo = -1
+		}
+		if ps.pos >= ps.endAt && !ps.loop {
+			continue
 		}
 		ps.readBufferAndAdd(buf)
 		if ps.pos >= ps.endAt && ps.onEndCallback != nil {
