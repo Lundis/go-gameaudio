@@ -38,10 +38,16 @@ func (ps *PlayingSound) Seconds() (current, total float32) {
 func (ps *PlayingSound) Stop() {
 	ps.endAt = ps.pos
 	ps.loop = false
+	ps.onEndCallback = nil
+	ps.seekTo = -1
 }
 
-func (ps *PlayingSound) StopFadeOut(fadeIn time.Duration) {
-	ps.endAt = min(ps.endAt, ps.pos+int(float64(mux.channelCount*mux.sampleRate)*fadeIn.Seconds()))
+func (ps *PlayingSound) StopFadeOut(fadeOut time.Duration) {
+	samplesPerSecond := float64(mux.channelCount * mux.sampleRate)
+	ps.endAt = min(ps.endAt, ps.pos+int(samplesPerSecond*fadeOut.Seconds()))
+	ps.loop = false
+	ps.onEndCallback = nil
+	ps.seekTo = -1
 	ps.fadeOutStartsAt = ps.pos
 }
 
