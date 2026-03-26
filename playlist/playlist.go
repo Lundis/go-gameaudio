@@ -80,7 +80,7 @@ func (pl *PlayList) play() {
 	track := pl.Tracks[pl.currentTrack]
 	if track.playingSound == nil || !track.playingSound.IsPlaying() {
 		if len(pl.Tracks) > 1 {
-			track.playingSound = track.sound.Play()
+			track.playingSound = track.sound.PlayFadeIn(time.Second / 2)
 			track.playingSound.OnEndCallback(pl.PlayNext)
 		} else {
 			track.playingSound = track.sound.PlayLoop(time.Second)
