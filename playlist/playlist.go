@@ -3,9 +3,6 @@ package playlist
 import (
 	"log"
 	"math/rand"
-	"time"
-
-	"github.com/Lundis/go-gameaudio/audio"
 )
 
 var playLists map[Id]*PlayList
@@ -19,18 +16,16 @@ type PlayList struct {
 	currentTrack int
 }
 
-type Track struct {
-	Path         string
-	Name         string
-	Album        string
-	Author       string
-	Volume       float32
-	sound        *audio.Sound
-	playingSound *audio.PlayingSound
+type trackCommon struct {
+	Path   string
+	Name   string
+	Album  string
+	Author string
+	Volume float32
 }
 
 func Pause() {
-	audio.ChannelIdMusic.Pause()
+	pauseMusic()
 }
 
 func CurrentPlaylist() *PlayList {
@@ -45,14 +40,14 @@ func CurrentTrack() *Track {
 }
 
 func Seek(percentage float32) {
-	if track := CurrentTrack(); track != nil && track.playingSound != nil {
-		track.playingSound.Seek(percentage)
+	if track := CurrentTrack(); track != nil {
+		trackSeek(track, percentage)
 	}
 }
 
 func Seconds() (current, total float32) {
-	if track := CurrentTrack(); track != nil && track.playingSound != nil {
-		return track.playingSound.Seconds()
+	if track := CurrentTrack(); track != nil {
+		return trackSeconds(track)
 	}
 	return
 }
@@ -64,7 +59,7 @@ func (playListId Id) Play(shuffle bool) {
 		if currentPlayList.Id == playListId {
 			return
 		}
-		currentPlayList.stop()
+		playlistStop(currentPlayList)
 		currentPlayList = nil
 	}
 	if pl, ok := playLists[playListId]; ok {
@@ -72,40 +67,20 @@ func (playListId Id) Play(shuffle bool) {
 		if shuffle {
 			currentPlayList.currentTrack = rand.Intn(len(currentPlayList.Tracks))
 		}
-		currentPlayList.play()
+		playlistPlay(currentPlayList)
 	}
-}
-
-func (pl *PlayList) play() {
-	track := pl.Tracks[pl.currentTrack]
-	if track.playingSound == nil || !track.playingSound.IsPlaying() {
-		if len(pl.Tracks) > 1 {
-			track.playingSound = track.sound.PlayFadeIn(time.Second / 2)
-			track.playingSound.OnEndCallback(pl.PlayNext)
-		} else {
-			track.playingSound = track.sound.PlayLoop(time.Second)
-		}
-	}
-}
-
-func (pl *PlayList) stop() {
-	track := pl.Tracks[pl.currentTrack]
-	if track.playingSound != nil && track.playingSound.IsPlaying() {
-		track.playingSound.StopFadeOut(time.Second)
-	}
-	track.playingSound = nil
 }
 
 func (pl *PlayList) PlayNext() {
-	pl.stop()
+	playlistStop(pl)
 	pl.currentTrack = (pl.currentTrack + 1) % len(pl.Tracks)
 	log.Println("INFO: playing next track", pl.Tracks[pl.currentTrack].Name)
-	pl.play()
+	playlistPlay(pl)
 }
 
 func (pl *PlayList) PlayPrevious() {
-	pl.stop()
+	playlistStop(pl)
 	pl.currentTrack = (pl.currentTrack - 1 + len(pl.Tracks)) % len(pl.Tracks)
 	log.Println("INFO: playing previous track", pl.Tracks[pl.currentTrack].Name)
-	pl.play()
+	playlistPlay(pl)
 }
