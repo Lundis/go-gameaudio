@@ -2,7 +2,11 @@
 
 package playlist
 
-import "syscall/js"
+import (
+	"syscall/js"
+
+	"github.com/Lundis/go-gameaudio/audio"
+)
 
 // Track holds a reference to the browser's HTMLAudioElement.
 // The browser owns decoding and playback; Go only drives control flow.
@@ -37,7 +41,7 @@ func playlistPlay(pl *PlayList) {
 	if !track.audioEl.Get("paused").Bool() {
 		return
 	}
-	track.audioEl.Set("volume", track.Volume)
+	track.audioEl.Set("volume", track.Volume*audio.ChannelIdMusic.Volume())
 	if len(pl.Tracks) > 1 {
 		track.audioEl.Set("loop", false)
 		releaseEndedFn(track)

@@ -26,6 +26,11 @@ func (cid ChannelId) SetVolume(volume float32) {
 	setChannelSettings(cid, settings)
 }
 
+func (cid ChannelId) Volume() float32 {
+	settings := getChannelSettings(cid)
+	return settings.volume
+}
+
 func (cid ChannelId) Pause() {
 	settings := getChannelSettings(cid)
 	settings.paused = true
