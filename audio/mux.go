@@ -32,6 +32,7 @@ var mux *Mux
 const soundPoolSize = 128
 
 var soundPool = make([]PlayingSound, soundPoolSize)
+var dynamicSounds []*DynamicSound
 
 func getFreePlayingSound(s *Sound) (ps *PlayingSound) {
 	for i := 0; i < soundPoolSize; i++ {
@@ -82,6 +83,11 @@ func (m *Mux) ReadFloat32s(buf []float32) {
 		if ps.pos >= ps.endAt && ps.onEndCallback != nil {
 			ps.onEndCallback()
 			ps.onEndCallback = nil
+		}
+	}
+	for _, ds := range dynamicSounds {
+		if ds != nil {
+			ds.readBufferAndAdd(buf)
 		}
 	}
 
