@@ -74,7 +74,7 @@ func (ds *DynamicSound) readBufferAndAdd(buf []float32) {
 	clear(ds.tmp)
 	ds.fillFunc(ds.tmp)
 	volume := ds.volume * ds.channelId.Volume()
-	for i := 0; i < len(ds.tmp); i++ {
+	for i := 0; i < min(len(ds.tmp), len(buf)); i++ {
 		buf[i] += volume * ds.tmp[i]
 	}
 }
